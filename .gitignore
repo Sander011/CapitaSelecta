@@ -1,0 +1,10 @@
+
+backend/backend/__pycache__/
+
+backend/contrastive_explanation/__pycache__/
+
+backend/modelling/__pycache__/
+
+backend/modelling/migrations/__pycache__/
+
+frontend/yarn\.lock
