@@ -43,7 +43,9 @@ class DatasetViewSet(viewsets.ViewSet):
         X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names, contrast_names = obtain_data(openml_idx, columns_to_drop=columns_to_drop)
         X['label'] = y
 
-        return Response(X.to_dict('records'))
+        unique_per_category = { cat: X[cat].unique() for cat in categorical_names }
+
+        return Response({"categorical_values": unique_per_category, "samples": X.to_dict('records')})
 
 
     @action(detail=True)
