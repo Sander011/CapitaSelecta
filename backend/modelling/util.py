@@ -38,11 +38,9 @@ def train_model(classifier, categorical_names, X, train_X, train_y, test_X, test
     return model
 
 
-def explain_sample(sample, model, contrast_names, train_X, categorical_features):
-    dm = ce.domain_mappers.DomainMapperPandas(train_X, contrast_names=contrast_names, categorical_features=categorical_features)
-
-    tree = ce.TreeExplanator(print_tree=False, domain_mapper=dm)
-
+def explain_sample(sample, model, contrast_names, X, categorical_features, foil=None):
+    dm = ce.domain_mappers.DomainMapperPandas(X, contrast_names=contrast_names, categorical_features=categorical_features)
+    tree = ce.TreeExplanator(print_tree=False, domain_mapper=dm, feature_map=dm.feature_map)
     exp = ce.ContrastiveExplanation(dm, tree)
 
-    return exp.explain_instance_domain(model.predict_proba, sample)
+    return exp.explain_instance_domain(model.predict_proba, sample, include_factual=True, foil=foil)

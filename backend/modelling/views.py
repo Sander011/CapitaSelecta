@@ -43,7 +43,8 @@ class DatasetViewSet(viewsets.ViewSet):
         X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names, contrast_names = obtain_data(openml_idx, columns_to_drop=columns_to_drop)
         X['label'] = y
 
-        unique_per_category = { cat: X[cat].unique() for cat in categorical_names }
+        unique_per_category = {cat: X[cat].unique() for cat in categorical_names}
+        unique_per_category['label'] = X['label'].unique()
 
         return Response({"categorical_values": unique_per_category, "samples": X.to_dict('records')})
 
@@ -79,8 +80,10 @@ class DatasetViewSet(viewsets.ViewSet):
         if (sample_idx == -1 or sample_idx > len(X)):
             sample_idx = np.random.randint(len(X))
         sample = X.iloc[sample_idx]
-        explanation = explain_sample(sample, model, contrast_names, train_X, [i for i, x in enumerate(attribute_names) if x in categorical_names])
+
+        foil = request.GET['foilClass'] if 'foilClass' in request.GET else None
+        cf, f, cf_rules, f_rules = explain_sample(sample, model, contrast_names, X, [i for i, x in enumerate(attribute_names) if x in categorical_names], foil)
 
         print(f'Explanation: {time.time() - model_loading_time}s')
 
-        return Response(explanation)
+        return Response(cf)

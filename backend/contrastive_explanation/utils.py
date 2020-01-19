@@ -118,15 +118,12 @@ def rbf(d, sigma=0.1):
 ###############################
 
 
-def print_binary_tree(t, sample, feature_map, domain_mapper):
+def print_binary_tree(t, sample, domain_mapper, feature_map=None):
     """Print a binary tree and sample to a string."""
     fact_leaf = t.apply(sample)[0]
-    print(sample[0])
     feature_names = domain_mapper.features
     inv_names = domain_mapper.feature_map_inv_verbose
     categorical_features = domain_mapper.categorical_features
-    indices = list(range(0, len(feature_names)))
-    normal_features = [x for x in indices if x not in categorical_features]
 
     t_ = t.tree_
     print("def tree():")
@@ -136,14 +133,24 @@ def print_binary_tree(t, sample, feature_map, domain_mapper):
         if t_.feature[node] != _tree.TREE_UNDEFINED:
             name = t_.feature[node]
             threshold = t_.threshold[node]
-            feature_index = inv_names[name]
-            feature = feature_names[feature_index]
-            if feature_index in categorical_features:
-                print("{}if {} /= {}:".format(indent, feature, feature_map[feature][name]))
-                recurse(t_.children_left[node], depth + 1)
-                print("{}else:  # if {} = {}".format(indent, feature, feature_map[feature][name]))
-                recurse(t_.children_right[node], depth + 1)
+            if categorical_features is not None:
+                feature_index = inv_names[name]
+                feature = feature_names[feature_index]
+                if feature_index in categorical_features:
+                    print("{}if {} /= {}:".format(indent, feature, domain_mapper.encoders[feature_index].idx2name[
+                        name - feature_map[feature_index][0]]))
+                    recurse(t_.children_left[node], depth + 1)
+                    print("{}else:  # if {} = {}".format(indent, feature,
+                                                         domain_mapper.encoders[feature_index].idx2name[
+                                                             name - feature_map[feature_index][0]]))
+                    recurse(t_.children_right[node], depth + 1)
+                else:
+                    print("{}if {} <= {}:".format(indent, feature, threshold))
+                    recurse(t_.children_left[node], depth + 1)
+                    print("{}else:  # if {} > {}".format(indent, feature, threshold))
+                    recurse(t_.children_right[node], depth + 1)
             else:
+                feature = feature_names[name]
                 print("{}if {} <= {}:".format(indent, feature, threshold))
                 recurse(t_.children_left[node], depth + 1)
                 print("{}else:  # if {} > {}".format(indent, feature, threshold))

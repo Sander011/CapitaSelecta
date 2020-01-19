@@ -398,6 +398,8 @@ class DomainMapperTabular(DomainMapper):
                     ret.operator = Operator.EQ if ret.operator is Operator.GEQ \
                                                else Operator.NOTEQ
                     ret.categorical = True
+                else:
+                    ret.feature = self.features[feature]
             return ret
 
         if self.features is not None:
@@ -443,14 +445,12 @@ class DomainMapperTabular(DomainMapper):
         fact = self.map_contrast_names(fact)
         foil = self.map_contrast_names(foil)
 
-        e = f"The model predicted '{fact}' instead of '{foil}' " \
-            f"because '{self.rule_to_str(counterfactuals)}'"
-
+        cf = f"The model predicted '{fact}' instead of '{foil}' because '{self.rule_to_str(counterfactuals)}'"
+        f = f"The model predicted '{fact}' because '{self.rule_to_str(factuals, remove_last=True)}'"
         if factuals is None:
-            return e
+            return cf, counterfactuals
         else:
-            return (e, f"The model predicted '{fact}' because "
-                       f"'{self.rule_to_str(factuals, remove_last=True)}'")
+            return cf, f, counterfactuals, factuals
 
 
 class DomainMapperPandas(DomainMapperTabular):
