@@ -16,14 +16,13 @@ def fetch_from_openml(dataset_index, columns_to_drop):
     X = X.drop(columns_to_drop, axis=1)
     categorical_names = [attribute_names[i] for i in range(len(attribute_names)) if categorical_indicator[i]]
     attribute_names = X.columns
-    contrast_names = np.array(y.unique())
 
     for x in attribute_names:
         X[x] = X[x].astype(str)
 
     train_X, test_X, train_y, test_y = train_test_split(X, y)
 
-    return X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names, contrast_names
+    return X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names
 
 
 def obtain_data(dataset_index, columns_to_drop=[]):
@@ -38,9 +37,12 @@ def train_model(classifier, categorical_names, X, train_X, train_y, test_X, test
     return model
 
 
-def explain_sample(sample, model, contrast_names, X, categorical_features, foil=None):
-    dm = ce.domain_mappers.DomainMapperPandas(X, contrast_names=contrast_names, categorical_features=categorical_features)
+def explain_sample(sample, model, X, categorical_features, foil=None):
+    dm = ce.domain_mappers.DomainMapperPandas(X, contrast_names=model[1].classes_, categorical_features=categorical_features)
     tree = ce.TreeExplanator(print_tree=False, domain_mapper=dm, feature_map=dm.feature_map)
     exp = ce.ContrastiveExplanation(dm, tree)
 
     return exp.explain_instance_domain(model.predict_proba, sample, include_factual=True, foil=foil)
+
+def predict_samples(model, X):
+    return [model[1].classes_[np.argmax(x)] for x in model.predict_proba(X)]

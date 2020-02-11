@@ -10,7 +10,7 @@ from sklearn.externals import joblib
 
 from .models import Dataset
 from .serializers import DatasetDetailSerializer, DatasetListSerializer, DatasetPredictSerializer
-from .util import obtain_data, train_model, explain_sample
+from .util import obtain_data, train_model, explain_sample, predict_samples
 
 import time
 
@@ -40,8 +40,18 @@ class DatasetViewSet(viewsets.ViewSet):
         if columns_to_drop[0] == '':
             columns_to_drop = []
 
-        X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names, contrast_names = obtain_data(openml_idx, columns_to_drop=columns_to_drop)
+        X, y, train_X, test_X, train_y, test_y, categorical_names, _ = obtain_data(openml_idx, columns_to_drop=columns_to_drop)
+
+        try:
+            model = joblib.load(f'{openml_idx}.sav')
+        except:
+            model = train_model(AdaBoostClassifier(random_state=np.random.RandomState(1994), n_estimators=1000), categorical_names, X, train_X, train_y, test_X, test_y)
+            joblib.dump(model, f'{openml_idx}.sav')
+
+        X['model_predictions'] = predict_samples(model, X)
         X['label'] = y
+
+
 
         unique_per_category = {cat: X[cat].unique() for cat in categorical_names}
         unique_per_category['label'] = X['label'].unique()
@@ -62,7 +72,7 @@ class DatasetViewSet(viewsets.ViewSet):
         if columns_to_drop[0] == '':
             columns_to_drop = []
 
-        X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names, contrast_names = obtain_data(openml_idx, columns_to_drop=columns_to_drop)
+        X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names = obtain_data(openml_idx, columns_to_drop=columns_to_drop)
 
         dataset_loading_time = time.time()
         print(f'Loading data: {dataset_loading_time-start}s')
@@ -82,7 +92,7 @@ class DatasetViewSet(viewsets.ViewSet):
         sample = X.iloc[sample_idx]
 
         foil = request.GET['foilClass'] if 'foilClass' in request.GET else None
-        cf, f, cf_rules, f_rules = explain_sample(sample, model, contrast_names, X, [i for i, x in enumerate(attribute_names) if x in categorical_names], foil)
+        cf, f, cf_rules, f_rules = explain_sample(sample, model, X, [i for i, x in enumerate(attribute_names) if x in categorical_names], foil)
 
         print(f'Explanation: {time.time() - model_loading_time}s')
 
