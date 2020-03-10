@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 
-import Main from './components/Main';
+import DatasetDetails from './components/DatasetDetails';
 
 import { makeStyles } from '@material-ui/core/styles';
 import { AppBar, Button, Toolbar, Typography } from '@material-ui/core';
+import Spam from './components/Spam';
+import Adult from './components/Adult';
 
 const useStyles = makeStyles(theme => ({
 	root: {
@@ -22,7 +24,13 @@ const useStyles = makeStyles(theme => ({
 
 const App = () => {
 	const classes = useStyles();
-	const [datasetId, setDatasetId] = useState(54);
+	const [datasetId, setDatasetId] = useState(44);
+
+	const renderContent = () => {
+		if (datasetId === 44) return <Spam />;
+		if (datasetId === 1590) return <Adult />;
+		return <DatasetDetails datasetId={datasetId} />;
+	};
 
 	return (
 		<div className={classes.root}>
@@ -37,12 +45,15 @@ const App = () => {
 					<Button onClick={() => setDatasetId(31)} color="inherit">
 						Credit-g
 					</Button>
+					<Button onClick={() => setDatasetId(44)} color="inherit">
+						Spam
+					</Button>
 					<Button onClick={() => setDatasetId(54)} color="inherit">
 						Vehicle
 					</Button>
 				</Toolbar>
 			</AppBar>
-			<Main datasetId={datasetId} />
+			{renderContent()}
 		</div>
 	);
 };

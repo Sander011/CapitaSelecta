@@ -69,7 +69,7 @@ const getColumns = (keys, categoricalValues) =>
 const getDatasetDetails = id => Axios.get(`/api/datasets/${id}`);
 const getDatasetSamples = id => Axios.get(`/api/datasets/${id}/retrieve_samples/`);
 
-const Main = ({ classes, datasetId }) => {
+const DatasetDetails = ({ classes, datasetId }) => {
 	const [dataset, setDataset] = useState(undefined);
 	const [error, setError] = useState(undefined);
 	const [predicting, setPredicting] = useState(false);
@@ -106,6 +106,11 @@ const Main = ({ classes, datasetId }) => {
 			setSelected(undefined);
 		};
 	}, [datasetId]);
+
+	const selectRow = row => {
+		setSelected(row);
+		setCurrentValue(undefined);
+	};
 
 	const filterSamples = () => {
 		filteredSamples.length === allSamples.length
@@ -155,7 +160,7 @@ const Main = ({ classes, datasetId }) => {
 						}}
 						style={{ width: '95vw' }}
 						columns={getColumns(Object.keys(filteredSamples[0]), categoricalValues)}
-						onRowClick={(_, selectedRow) => setSelected(selectedRow)}
+						onRowClick={(_, selectedRow) => selectRow(selectedRow)}
 					/>
 					<div style={styles.controls}>
 						<Button
@@ -188,11 +193,13 @@ const Main = ({ classes, datasetId }) => {
 							<InputLabel>Foil class</InputLabel>
 							<Select value={currentValue} onChange={event => setCurrentValue(event.target.value)}>
 								{categoricalValues.label &&
-									categoricalValues.label.map(label => (
-										<MenuItem key={label} value={label}>
-											{label}
-										</MenuItem>
-									))}
+									categoricalValues.label
+										.filter(label => selected && selected.model_predictions !== label)
+										.map(label => (
+											<MenuItem key={label} value={label}>
+												{label}
+											</MenuItem>
+										))}
 							</Select>
 						</FormControl>
 					</div>
@@ -217,4 +224,4 @@ const Main = ({ classes, datasetId }) => {
 		</div>
 	);
 };
-export default withStyles(styles)(Main);
+export default withStyles(styles)(DatasetDetails);
