@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Axios from 'axios';
 import {
 	Button,
 	CircularProgress,
+	MenuItem,
+	Select,
+	Slider,
 	Snackbar,
-	TextareaAutosize,
 	Typography,
 	withStyles,
 } from '@material-ui/core';
@@ -42,6 +44,15 @@ const styles = {
 		height: '150px',
 		justifyContent: 'space-evenly',
 	},
+	leftColumn: {
+		display: 'flex',
+		flexDirection: 'column',
+		justifyContent: 'flex-start',
+		alignItems: 'flex-start',
+		width: '50%',
+		height: '70vh',
+		margin: '50px',
+	},
 	rightColumn: {
 		display: 'flex',
 		flexDirection: 'column',
@@ -50,6 +61,23 @@ const styles = {
 		width: '50%',
 		height: '70vh',
 		margin: '50px',
+	},
+	input: {
+		display: 'flex',
+		width: '100%',
+		justifyContent: 'space-between',
+		margin: '10px',
+	},
+	inputText: {
+		width: '10vw',
+	},
+	inputChanger: {
+		width: '20vw',
+		display: 'flex',
+	},
+	sliderText: {
+		marginLeft: '25px',
+		width: '25px',
 	},
 	options1: {
 		display: 'flex',
@@ -62,118 +90,13 @@ const styles = {
 	},
 };
 
-const word_counters = [
-	'make',
-	'address',
-	'all',
-	'3d',
-	'our',
-	'over',
-	'remove',
-	'internet',
-	'order',
-	'mail',
-	'receive',
-	'will',
-	'people',
-	'report',
-	'addresses',
-	'free',
-	'business',
-	'email',
-	'you',
-	'credit',
-	'your',
-	'font',
-	'000',
-	'money',
-	'hp',
-	'hpl',
-	'george',
-	'650',
-	'lab',
-	'labs',
-	'telnet',
-	'857',
-	'data',
-	'415',
-	'85',
-	'technology',
-	'1999',
-	'parts',
-	'pm',
-	'direct',
-	'cs',
-	'meeting',
-	'original',
-	'project',
-	're',
-	'edu',
-	'table',
-	'conference',
-];
+const getFeatures = id => Axios.get(`/api/datasets/${id}/retrieve_adult/`);
 
-const char_counters = [';', '(', '[', '!', '$', '#'];
-const chars_to_chars = {
-	';': '%3B',
-	'(': '%2B',
-	'[': '%5B',
-	'!': '%21',
-	$: '%24',
-	'#': '%23',
-};
-
-const countValues = email => {
-	const toMatch = ` ${email} `;
-	const word_freqs = word_counters.map(
-		f => (toMatch.match(new RegExp(`(\\W+${f}\\W+)`, 'gi')) || []).length,
-	);
-	const char_freqs = char_counters.map(
-		c => (toMatch.match(new RegExp(`[${c}]`, 'g')) || []).length,
-	);
-	const capitals = toMatch.match(/([A-Z]+)/g) || [];
-	const capital_run_lengths = capitals.map(a => a.length);
-	const capital_run_lengths_longest = Math.max(...capital_run_lengths, 0);
-	const capital_run_lengths_total = capital_run_lengths.reduce((a, b) => a + b, 0);
-	const capital_run_lengths_average = capital_run_lengths_total / capital_run_lengths.length || 0;
-	return [
-		word_freqs,
-		char_freqs,
-		capital_run_lengths_longest,
-		capital_run_lengths_total,
-		capital_run_lengths_average,
-	];
-};
-
-const preprocess = (
-	word_freqs,
-	char_freqs,
-	capital_run_length_longest,
-	capital_run_length_total,
-	capital_run_length_average,
-) => {
-	const words = word_counters
-		.map((w, i) => ({ [`word_freq_${w}`]: word_freqs[i] }))
-		.reduce((res, word) => {
-			res[Object.keys(word)[0]] = Object.values(word)[0];
-			return res;
-		}, {});
-	const chars = char_counters
-		.map((c, i) => ({ [`char_freq_${chars_to_chars[c]}`]: char_freqs[i] }))
-		.reduce((res, char) => {
-			res[Object.keys(char)[0]] = Object.values(char)[0];
-			return res;
-		}, {});
-	return {
-		...words,
-		...chars,
-		capital_run_length_average,
-		capital_run_length_longest,
-		capital_run_length_total,
-	};
-};
-
-const DatasetDetails = ({ classes }) => {
+const Adult = ({ classes }) => {
+	const [features, setFeatures] = useState([]);
+	const [valuesPerFeature, setValuesPerFeature] = useState({});
+	const [boundsPerFeature, setBoundsPerFeature] = useState({});
+	const [featureValues, setFeatureValues] = useState({});
 	const [value, setValue] = useState(undefined);
 	const [error, setError] = useState(undefined);
 	const [predicting, setPredicting] = useState(false);
@@ -183,15 +106,36 @@ const DatasetDetails = ({ classes }) => {
 	const [modelUpdated, setModelUpdated] = useState(false);
 	const [done, setDone] = useState(false);
 
+	useEffect(() => {
+		Axios.all([getFeatures(1590)])
+			.then(
+				Axios.spread(details => {
+					setFeatures(details.data.features);
+					setValuesPerFeature(details.data.values_per_category);
+					setBoundsPerFeature(details.data.bounds_per_feature);
+				}),
+			)
+			.catch(_ =>
+				setError(
+					'Something went wrong while fetching the dataset. Please try another dataset or come back later.',
+				),
+			);
+
+		return () => {
+			setError(undefined);
+			setFeatures(undefined);
+		};
+	}, []);
+
 	const predictSample = () => {
 		if (predicting) return;
 		setPredicting(true);
 		setExplanation(defaultExplanation);
 		setPrediction(undefined);
 		setUserGuess(undefined);
-		Axios.get('/api/datasets/44/predict_spam/', {
+		Axios.get('/api/datasets/1590/predict_adult/', {
 			params: {
-				sample: preprocess(...countValues(value)),
+				sample: value,
 			},
 		})
 			.then(res => {
@@ -208,37 +152,66 @@ const DatasetDetails = ({ classes }) => {
 	};
 
 	const updateModel = () => {
-		Axios.get('/api/datasets/44/update_model/', {
+		Axios.get('/api/datasets/1590/update_model/', {
 			params: {
-				sample: preprocess(...countValues(value)),
+				sample: value,
 				prediction,
 			},
 		})
 			.then(res => setModelUpdated(true))
 			.catch(err => {
 				setError(
-					'Something went wrong while predicting the sample. Please try another sample or come back later.',
+					'Something went wrong while updating the model. Please try again or come back later.',
 				);
 			});
 	};
 
+	const renderValueChangers = f => {
+		if (f in valuesPerFeature) {
+			return (
+				<Select
+					value={featureValues[f] || valuesPerFeature[f][0]}
+					onChange={e => setFeatureValues({ ...featureValues, [f]: e.target.value })}
+					style={styles.inputChanger}
+				>
+					{valuesPerFeature[f].map(v => (
+						<MenuItem value={v}>{v}</MenuItem>
+					))}
+				</Select>
+			);
+		} else if (f in boundsPerFeature) {
+			const min = parseInt(boundsPerFeature[f][0]);
+			const max = parseInt(boundsPerFeature[f][1]);
+			return (
+				<div style={styles.inputChanger}>
+					<Slider
+						min={min}
+						max={max}
+						marks={[
+							{ value: min, label: min },
+							{ value: max, label: max },
+						]}
+						step="1"
+						valueLabelDisplay="auto"
+						value={featureValues[f] || min}
+						onChange={(_, v) => setFeatureValues({ ...featureValues, [f]: v })}
+					/>
+					<Typography style={styles.sliderText}>{featureValues[f] || min}</Typography>
+				</div>
+			);
+		}
+	};
+
 	return (
 		<div style={styles.container}>
-			<TextareaAutosize
-				aria-label="minimum height"
-				rowsMax={50}
-				rowsMin={50}
-				placeholder="Enter some email here..."
-				onChange={event => setValue(event.target.value)}
-				value={value}
-				style={{
-					resize: 'none',
-					width: '50%',
-					overflowY: 'scroll',
-					maxHeight: '70vh',
-					margin: '50px',
-				}}
-			/>
+			<div style={styles.leftColumn}>
+				{features.map(f => (
+					<div style={styles.input}>
+						<Typography style={styles.inputText}>{f}</Typography>
+						{renderValueChangers(f)}
+					</div>
+				))}
+			</div>
 			<div style={styles.rightColumn}>
 				<div>
 					<Button
@@ -272,7 +245,7 @@ const DatasetDetails = ({ classes }) => {
 								className={classes.button}
 								variant="contained"
 								color={userGuess === '1' ? 'primary' : ''}
-								onClick={() => setUserGuess('1')}
+								onClick={() => setUserGuess('<=50k')}
 							>
 								<Typography>Spam</Typography>
 							</Button>
@@ -280,7 +253,7 @@ const DatasetDetails = ({ classes }) => {
 								className={classes.button}
 								variant="contained"
 								color={userGuess === '0' ? 'primary' : ''}
-								onClick={() => setUserGuess('0')}
+								onClick={() => setUserGuess('>50k')}
 							>
 								<Typography>Not spam</Typography>
 							</Button>
@@ -334,4 +307,4 @@ const DatasetDetails = ({ classes }) => {
 	);
 };
 
-export default withStyles(styles)(DatasetDetails);
+export default withStyles(styles)(Adult);

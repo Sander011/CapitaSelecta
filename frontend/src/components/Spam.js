@@ -173,7 +173,7 @@ const preprocess = (
 	};
 };
 
-const DatasetDetails = ({ classes }) => {
+const Spam = ({ classes }) => {
 	const [value, setValue] = useState(undefined);
 	const [error, setError] = useState(undefined);
 	const [predicting, setPredicting] = useState(false);
@@ -217,7 +217,7 @@ const DatasetDetails = ({ classes }) => {
 			.then(res => setModelUpdated(true))
 			.catch(err => {
 				setError(
-					'Something went wrong while predicting the sample. Please try another sample or come back later.',
+					'Something went wrong while updating the model. Please try again or come back later.',
 				);
 			});
 	};
@@ -334,4 +334,4 @@ const DatasetDetails = ({ classes }) => {
 	);
 };
 
-export default withStyles(styles)(DatasetDetails);
+export default withStyles(styles)(Spam);

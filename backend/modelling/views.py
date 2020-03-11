@@ -53,8 +53,6 @@ class DatasetViewSet(viewsets.ViewSet):
         X['model_predictions'] = predict_samples(model, X)
         X['label'] = y
 
-
-
         unique_per_category = {cat: X[cat].unique() for cat in categorical_names}
         unique_per_category['label'] = X['label'].unique()
 
@@ -163,3 +161,21 @@ class DatasetViewSet(viewsets.ViewSet):
         model.named_steps['classifier'].partial_fit(X, y)
         joblib.dump(model, f'{pk}.sav')
         return Response()
+
+    @action(detail=True)
+    def retrieve_adult(self, request, pk=None):
+        queryset = Dataset.objects.all()
+        dataset = get_object_or_404(queryset, openml_idx=pk)
+        serializer = DatasetPredictSerializer(dataset)
+
+        openml_idx = serializer.data['openml_idx']
+        columns_to_drop = serializer.data['columns_to_drop'].split(',')
+        if columns_to_drop[0] == '':
+            columns_to_drop = []
+
+        X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names = obtain_data(openml_idx, columns_to_drop=columns_to_drop)
+        X['label'] = y
+        X = X[(X['workclass'] != 'nan') & (X['occupation'] != 'nan') & (X['native-country'] != 'nan')]
+        unique_per_category = {cat: X[cat].unique() for cat in categorical_names}
+        bounds_per_feature = {feat: [X[feat].min(), X[feat].max()] for feat in list(set(attribute_names) - set(categorical_names))}
+        return Response({"values_per_category": unique_per_category, "bounds_per_feature": bounds_per_feature, "features": attribute_names})
