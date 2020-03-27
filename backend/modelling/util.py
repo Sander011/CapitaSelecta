@@ -22,7 +22,7 @@ def fetch_from_openml(dataset_index, columns_to_drop):
 
     train_X, test_X, train_y, test_y = train_test_split(X, y)
 
-    return X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names
+    return X, y, train_X, test_X, train_y, test_y, [x for x in categorical_names if x not in columns_to_drop], attribute_names
 
 
 def obtain_data(dataset_index, columns_to_drop=[]):
@@ -39,10 +39,10 @@ def train_model(classifier, categorical_names, X, train_X, train_y, test_X, test
 
 def explain_sample(sample, model, X, categorical_features, foil=None):
     dm = ce.domain_mappers.DomainMapperPandas(X, contrast_names=model[1].classes_, categorical_features=categorical_features)
-    tree = ce.TreeExplanator(print_tree=False, domain_mapper=dm, feature_map=dm.feature_map)
+    tree = ce.TreeExplanator(print_tree=True, domain_mapper=dm, feature_map=dm.feature_map)
     exp = ce.ContrastiveExplanation(dm, tree)
+    return exp.explain_instance_domain(model.predict_proba, sample, include_factual=True, foil=foil, n_samples=2500)
 
-    return exp.explain_instance_domain(model.predict_proba, sample, include_factual=True, foil=foil)
 
 def predict_samples(model, X):
     return [model[1].classes_[np.argmax(x)] for x in model.predict_proba(X)]

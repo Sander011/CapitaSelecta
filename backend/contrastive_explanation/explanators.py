@@ -145,9 +145,6 @@ class TreeExplanator(RuleExplanator):
         if self.verbose:
             print('[E] Fidelity of tree on neighborhood data =', local_fidelity)
 
-        if self.print_tree:
-            print_binary_tree(model, xs[0].reshape(1, -1), self.domain_mapper, self.feature_map)
-
         return model, local_fidelity
 
     def descriptive_path(self, decision_path, sample, tree):
@@ -380,7 +377,6 @@ class TreeExplanator(RuleExplanator):
                                                foil_nodes,
                                                tree.tree_,
                                                strategy)
-
         return self.descriptive_path(foil_path, sample, tree), confidence
 
     def get_rule(self,
@@ -407,6 +403,10 @@ class TreeExplanator(RuleExplanator):
         path, confidence = self.closest_decision(self.tree,
                                                  fact_sample,
                                                  strategy=foil_strategy)
+
+
+        if self.print_tree:
+            print_binary_tree(self.tree, fact_sample.reshape(1, -1), self.domain_mapper, self.feature_map)
 
         return path, confidence, fidelity
 

@@ -2,13 +2,14 @@ from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from sklearn.model_selection import train_test_split
 
 import json
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.externals import joblib
-from sklearn import linear_model
+from sklearn import linear_model, naive_bayes
 
 from .models import Dataset
 from .serializers import DatasetDetailSerializer, DatasetListSerializer, DatasetPredictSerializer
@@ -47,7 +48,7 @@ class DatasetViewSet(viewsets.ViewSet):
         try:
             model = joblib.load(f'{openml_idx}.sav')
         except:
-            model = train_model(AdaBoostClassifier(random_state=np.random.RandomState(1994), n_estimators=1000), categorical_names, X, train_X, train_y, test_X, test_y)
+            model = train_model(AdaBoostClassifier(random_state=np.random.RandomState(1994), n_estimators=10), categorical_names, X, train_X, train_y, test_X, test_y)
             joblib.dump(model, f'{openml_idx}.sav')
 
         X['model_predictions'] = predict_samples(model, X)
@@ -157,7 +158,7 @@ class DatasetViewSet(viewsets.ViewSet):
 
         X = np.array(pd.Series(json.loads(request.GET['sample']))).reshape(1,-1)
         y = pd.Series(request.GET['prediction'])
-
+        X = model.named_steps['label_encoder'].fit_transform(X)
         model.named_steps['classifier'].partial_fit(X, y)
         joblib.dump(model, f'{pk}.sav')
         return Response()
@@ -175,7 +176,45 @@ class DatasetViewSet(viewsets.ViewSet):
 
         X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names = obtain_data(openml_idx, columns_to_drop=columns_to_drop)
         X['label'] = y
-        X = X[(X['workclass'] != 'nan') & (X['occupation'] != 'nan') & (X['native-country'] != 'nan')]
+        X = X[(X['occupation'] != 'nan') & (X['native-country'] != 'nan')]
         unique_per_category = {cat: X[cat].unique() for cat in categorical_names}
         bounds_per_feature = {feat: [X[feat].min(), X[feat].max()] for feat in list(set(attribute_names) - set(categorical_names))}
         return Response({"values_per_category": unique_per_category, "bounds_per_feature": bounds_per_feature, "features": attribute_names})
+
+    @action(detail=True)
+    def predict_adult(self, request, pk=None):
+        start = time.time()
+
+        queryset = Dataset.objects.all()
+        dataset = get_object_or_404(queryset, openml_idx=pk)
+        serializer = DatasetPredictSerializer(dataset)
+
+        openml_idx = serializer.data['openml_idx']
+        columns_to_drop = serializer.data['columns_to_drop'].split(',')
+        if columns_to_drop[0] == '':
+            columns_to_drop = []
+
+        X, y, train_X, test_X, train_y, test_y, categorical_names, attribute_names = obtain_data(openml_idx, columns_to_drop=columns_to_drop)
+        X['label'] = y
+        X = X[(X['occupation'] != 'nan') & (X['native-country'] != 'nan')]
+        y = X['label']
+        X = X.drop(columns=['label'])
+        train_X, test_X, train_y, test_y = train_test_split(X, y)
+        dataset_loading_time = time.time()
+        print(f'Loading data: {dataset_loading_time-start}s')
+
+        try:
+            model = joblib.load(f'{openml_idx}.sav')
+        except:
+            model = train_model(naive_bayes.CategoricalNB(), categorical_names, X, train_X, train_y, test_X, test_y)
+            joblib.dump(model, f'{openml_idx}.sav')
+
+        model_loading_time = time.time()
+        print(f'Loading model: {model_loading_time - dataset_loading_time}s')
+        df = pd.Series(json.loads(request.GET['sample']))
+        prediction = predict_samples(model, np.array(df).reshape(1, -1))
+
+        cf, f, cf_rules, f_rules = explain_sample(df, model, X, [i for i, x in enumerate(attribute_names) if x in categorical_names], None)
+        print(f'Explanation: {time.time() - model_loading_time}s')
+        print(f)
+        return Response({'explanation': cf, 'prediction': prediction[0]})

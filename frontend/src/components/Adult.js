@@ -12,7 +12,7 @@ import {
 } from '@material-ui/core';
 import Alert from '@material-ui/lab/Alert';
 
-const defaultExplanation = 'Enter an email and press explain to start!';
+const defaultExplanation = 'Enter feature values and press explain to start!';
 
 const styles = {
 	button: {
@@ -97,7 +97,6 @@ const Adult = ({ classes }) => {
 	const [valuesPerFeature, setValuesPerFeature] = useState({});
 	const [boundsPerFeature, setBoundsPerFeature] = useState({});
 	const [featureValues, setFeatureValues] = useState({});
-	const [value, setValue] = useState(undefined);
 	const [error, setError] = useState(undefined);
 	const [predicting, setPredicting] = useState(false);
 	const [explanation, setExplanation] = useState(defaultExplanation);
@@ -129,13 +128,24 @@ const Adult = ({ classes }) => {
 
 	const predictSample = () => {
 		if (predicting) return;
+
 		setPredicting(true);
 		setExplanation(defaultExplanation);
 		setPrediction(undefined);
 		setUserGuess(undefined);
+
+		const sampleFeatures = {};
+
+		features.forEach(f => {
+			if (f in valuesPerFeature) sampleFeatures[f] = featureValues[f] || valuesPerFeature[f][0];
+			if (f in boundsPerFeature) {
+				sampleFeatures[f] = featureValues[f] || boundsPerFeature[f][0];
+			}
+		});
+
 		Axios.get('/api/datasets/1590/predict_adult/', {
 			params: {
-				sample: value,
+				sample: sampleFeatures,
 			},
 		})
 			.then(res => {
@@ -152,10 +162,18 @@ const Adult = ({ classes }) => {
 	};
 
 	const updateModel = () => {
+		const sampleFeatures = {};
+		features.forEach(f => {
+			if (f in valuesPerFeature) sampleFeatures[f] = featureValues[f] || valuesPerFeature[f][0];
+			if (f in boundsPerFeature) {
+				sampleFeatures[f] = featureValues[f] || boundsPerFeature[f][0];
+			}
+		});
+
 		Axios.get('/api/datasets/1590/update_model/', {
 			params: {
-				sample: value,
-				prediction,
+				sample: sampleFeatures,
+				prediction: userGuess,
 			},
 		})
 			.then(res => setModelUpdated(true))
@@ -171,11 +189,13 @@ const Adult = ({ classes }) => {
 			return (
 				<Select
 					value={featureValues[f] || valuesPerFeature[f][0]}
-					onChange={e => setFeatureValues({ ...featureValues, [f]: e.target.value })}
+					onChange={e => handleChange(f, e.target.value)}
 					style={styles.inputChanger}
 				>
 					{valuesPerFeature[f].map(v => (
-						<MenuItem value={v}>{v}</MenuItem>
+						<MenuItem key={v} value={v}>
+							{v}
+						</MenuItem>
 					))}
 				</Select>
 			);
@@ -191,10 +211,10 @@ const Adult = ({ classes }) => {
 							{ value: min, label: min },
 							{ value: max, label: max },
 						]}
-						step="1"
+						step={1.0}
 						valueLabelDisplay="auto"
 						value={featureValues[f] || min}
-						onChange={(_, v) => setFeatureValues({ ...featureValues, [f]: v })}
+						onChange={(_, v) => handleChange(f, v)}
 					/>
 					<Typography style={styles.sliderText}>{featureValues[f] || min}</Typography>
 				</div>
@@ -202,11 +222,20 @@ const Adult = ({ classes }) => {
 		}
 	};
 
+	const handleChange = (f, v) => {
+		setPredicting(false);
+		setExplanation(defaultExplanation);
+		setPrediction(undefined);
+		setUserGuess(undefined);
+
+		setFeatureValues({ ...featureValues, [f]: v });
+	};
+
 	return (
 		<div style={styles.container}>
 			<div style={styles.leftColumn}>
 				{features.map(f => (
-					<div style={styles.input}>
+					<div key={f} style={styles.input}>
 						<Typography style={styles.inputText}>{f}</Typography>
 						{renderValueChangers(f)}
 					</div>
@@ -234,28 +263,23 @@ const Adult = ({ classes }) => {
 				</Typography>
 				{explanation !== defaultExplanation && (
 					<div style={styles.options1}>
-						<div>
-							<Typography>
-								The model classified the email as {prediction === '0' ? 'not spam' : 'spam'}
-							</Typography>
-						</div>
-						<Typography>What did you think this email was?</Typography>
+						<Typography>What did you think this person was?</Typography>
 						<div style={styles.controls}>
 							<Button
 								className={classes.button}
 								variant="contained"
-								color={userGuess === '1' ? 'primary' : ''}
-								onClick={() => setUserGuess('<=50k')}
+								color={userGuess === '<=50K' ? 'primary' : ''}
+								onClick={() => setUserGuess('<=50K')}
 							>
-								<Typography>Spam</Typography>
+								<Typography>{'<=50K'}</Typography>
 							</Button>
 							<Button
 								className={classes.button}
 								variant="contained"
-								color={userGuess === '0' ? 'primary' : ''}
-								onClick={() => setUserGuess('>50k')}
+								color={userGuess === '>50K' ? 'primary' : ''}
+								onClick={() => setUserGuess('>50K')}
 							>
-								<Typography>Not spam</Typography>
+								<Typography>{'>50K'}</Typography>
 							</Button>
 						</div>
 						{userGuess &&
@@ -286,14 +310,14 @@ const Adult = ({ classes }) => {
 								</div>
 							) : (
 								<Typography>
-									Great! The model agrees with you. Enter a new email to try again.
+									Great! The model agrees with you. Enter new details to try again.
 								</Typography>
 							))}
 						<div style={styles.options1}>
 							{modelUpdated && (
-								<Typography>Model successfully updated! Enter a new email to try again.</Typography>
+								<Typography>Model successfully updated! Enter new details to try again.</Typography>
 							)}
-							{done && <Typography>That's fine! Enter a new email to try again.</Typography>}
+							{done && <Typography>That's fine! Enter new details to try again.</Typography>}
 						</div>
 					</div>
 				)}

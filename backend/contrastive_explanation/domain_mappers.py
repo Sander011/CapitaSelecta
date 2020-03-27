@@ -101,7 +101,16 @@ class DomainMapper:
         weights = self._weights(scaled_data, distance_metric)
 
         # Predict; distinguish between .predict and .predict_proba
-        preds = predict_fn(predict_data)
+        predict_data2 = np.transpose(predict_data).copy()
+        i = 0
+        for x in np.transpose(predict_data):
+            try:
+                t = predict_data2[i].astype(float).astype(int).clip(min=0)
+                predict_data2[i] = t
+            except:
+                predict_data2[i] = x
+            i += 1
+        preds = predict_fn(np.transpose(predict_data2))
         if preds.ndim > 1:
             preds = np.argmax(preds, axis=1)
 

@@ -29,7 +29,7 @@ const App = () => {
 	const renderContent = () => {
 		if (datasetId === 44) return <Spam />;
 		if (datasetId === 1590) return <Adult />;
-		return <DatasetDetails datasetId={datasetId} />;
+		return <DatasetDetails datasetId={1590} />;
 	};
 
 	return (
