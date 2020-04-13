@@ -7,7 +7,7 @@ import { AppBar, Button, Toolbar, Typography } from '@material-ui/core';
 import Spam from './components/Spam';
 import Adult from './components/Adult';
 
-const useStyles = makeStyles(theme => ({
+const useStyles = makeStyles((theme) => ({
 	root: {
 		flexGrow: 1,
 		display: 'flex',
@@ -42,15 +42,15 @@ const App = () => {
 					<Button onClick={() => setDatasetId(1590)} color="inherit">
 						Adult
 					</Button>
-					<Button onClick={() => setDatasetId(31)} color="inherit">
+					{/* <Button onClick={() => setDatasetId(31)} color="inherit">
 						Credit-g
-					</Button>
+					</Button> */}
 					<Button onClick={() => setDatasetId(44)} color="inherit">
 						Spam
 					</Button>
-					<Button onClick={() => setDatasetId(54)} color="inherit">
+					{/* <Button onClick={() => setDatasetId(54)} color="inherit">
 						Vehicle
-					</Button>
+					</Button> */}
 				</Toolbar>
 			</AppBar>
 			{renderContent()}

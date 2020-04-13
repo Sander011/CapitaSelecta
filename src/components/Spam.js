@@ -123,16 +123,16 @@ const chars_to_chars = {
 	'#': '%23',
 };
 
-const countValues = email => {
+const countValues = (email) => {
 	const toMatch = ` ${email} `;
 	const word_freqs = word_counters.map(
-		f => (toMatch.match(new RegExp(`(\\W+${f}\\W+)`, 'gi')) || []).length,
+		(f) => (toMatch.match(new RegExp(`(\\W+${f}\\W+)`, 'gi')) || []).length,
 	);
 	const char_freqs = char_counters.map(
-		c => (toMatch.match(new RegExp(`[${c}]`, 'g')) || []).length,
+		(c) => (toMatch.match(new RegExp(`[${c}]`, 'g')) || []).length,
 	);
 	const capitals = toMatch.match(/([A-Z]+)/g) || [];
-	const capital_run_lengths = capitals.map(a => a.length);
+	const capital_run_lengths = capitals.map((a) => a.length);
 	const capital_run_lengths_longest = Math.max(...capital_run_lengths, 0);
 	const capital_run_lengths_total = capital_run_lengths.reduce((a, b) => a + b, 0);
 	const capital_run_lengths_average = capital_run_lengths_total / capital_run_lengths.length || 0;
@@ -189,17 +189,18 @@ const Spam = ({ classes }) => {
 		setExplanation(defaultExplanation);
 		setPrediction(undefined);
 		setUserGuess(undefined);
+		setModelUpdated(false);
 		Axios.get('/api/datasets/44/predict_spam/', {
 			params: {
 				sample: preprocess(...countValues(value)),
 			},
 		})
-			.then(res => {
+			.then((res) => {
 				setExplanation(res.data.explanation);
 				setPrediction(res.data.prediction);
 				setPredicting(false);
 			})
-			.catch(err => {
+			.catch((err) => {
 				setError(
 					'Something went wrong while predicting the sample. Please try another sample or come back later.',
 				);
@@ -214,8 +215,8 @@ const Spam = ({ classes }) => {
 				prediction,
 			},
 		})
-			.then(res => setModelUpdated(true))
-			.catch(err => {
+			.then((res) => setModelUpdated(true))
+			.catch((err) => {
 				setError(
 					'Something went wrong while updating the model. Please try again or come back later.',
 				);
@@ -229,7 +230,7 @@ const Spam = ({ classes }) => {
 				rowsMax={50}
 				rowsMin={50}
 				placeholder="Enter some email here..."
-				onChange={event => setValue(event.target.value)}
+				onChange={(event) => setValue(event.target.value)}
 				value={value}
 				style={{
 					resize: 'none',
