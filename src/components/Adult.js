@@ -90,7 +90,7 @@ const styles = {
 	},
 };
 
-const getFeatures = id => Axios.get(`/api/datasets/${id}/retrieve_adult/`);
+const getFeatures = (id) => Axios.get(`/api/datasets/${id}/retrieve_adult/`);
 
 const Adult = ({ classes }) => {
 	const [features, setFeatures] = useState([]);
@@ -108,13 +108,13 @@ const Adult = ({ classes }) => {
 	useEffect(() => {
 		Axios.all([getFeatures(1590)])
 			.then(
-				Axios.spread(details => {
+				Axios.spread((details) => {
 					setFeatures(details.data.features);
 					setValuesPerFeature(details.data.values_per_category);
 					setBoundsPerFeature(details.data.bounds_per_feature);
 				}),
 			)
-			.catch(_ =>
+			.catch((_) =>
 				setError(
 					'Something went wrong while fetching the dataset. Please try another dataset or come back later.',
 				),
@@ -133,10 +133,11 @@ const Adult = ({ classes }) => {
 		setExplanation(defaultExplanation);
 		setPrediction(undefined);
 		setUserGuess(undefined);
+		setModelUpdated(false);
 
 		const sampleFeatures = {};
 
-		features.forEach(f => {
+		features.forEach((f) => {
 			if (f in valuesPerFeature) sampleFeatures[f] = featureValues[f] || valuesPerFeature[f][0];
 			if (f in boundsPerFeature) {
 				sampleFeatures[f] = featureValues[f] || boundsPerFeature[f][0];
@@ -148,12 +149,12 @@ const Adult = ({ classes }) => {
 				sample: sampleFeatures,
 			},
 		})
-			.then(res => {
+			.then((res) => {
 				setExplanation(res.data.explanation);
 				setPrediction(res.data.prediction);
 				setPredicting(false);
 			})
-			.catch(err => {
+			.catch((err) => {
 				setError(
 					'Something went wrong while predicting the sample. Please try another sample or come back later.',
 				);
@@ -163,7 +164,7 @@ const Adult = ({ classes }) => {
 
 	const updateModel = () => {
 		const sampleFeatures = {};
-		features.forEach(f => {
+		features.forEach((f) => {
 			if (f in valuesPerFeature) sampleFeatures[f] = featureValues[f] || valuesPerFeature[f][0];
 			if (f in boundsPerFeature) {
 				sampleFeatures[f] = featureValues[f] || boundsPerFeature[f][0];
@@ -176,23 +177,21 @@ const Adult = ({ classes }) => {
 				prediction: userGuess,
 			},
 		})
-			.then(res => setModelUpdated(true))
-			.catch(err => {
-				setError(
-					'Something went wrong while updating the model. Please try again or come back later.',
-				);
+			.then((res) => setModelUpdated(true))
+			.catch((err) => {
+				setError('Something went wrong while updating. Please try again or come back later.');
 			});
 	};
 
-	const renderValueChangers = f => {
+	const renderValueChangers = (f) => {
 		if (f in valuesPerFeature) {
 			return (
 				<Select
 					value={featureValues[f] || valuesPerFeature[f][0]}
-					onChange={e => handleChange(f, e.target.value)}
+					onChange={(e) => handleChange(f, e.target.value)}
 					style={styles.inputChanger}
 				>
-					{valuesPerFeature[f].map(v => (
+					{valuesPerFeature[f].map((v) => (
 						<MenuItem key={v} value={v}>
 							{v}
 						</MenuItem>
@@ -234,7 +233,7 @@ const Adult = ({ classes }) => {
 	return (
 		<div style={styles.container}>
 			<div style={styles.leftColumn}>
-				{features.map(f => (
+				{features.map((f) => (
 					<div key={f} style={styles.input}>
 						<Typography style={styles.inputText}>{f}</Typography>
 						{renderValueChangers(f)}
@@ -286,8 +285,8 @@ const Adult = ({ classes }) => {
 							(userGuess !== prediction ? (
 								<div style={styles.options1}>
 									<Typography>
-										You seem to disagree with the model, would you like to retrain the model using
-										this new information?
+										You seem to disagree with me, would you like me to use this new information in
+										future explanations?
 									</Typography>
 									<div style={styles.controls}>
 										<Button
@@ -310,12 +309,14 @@ const Adult = ({ classes }) => {
 								</div>
 							) : (
 								<Typography>
-									Great! The model agrees with you. Enter new details to try again.
+									Great! You seem to agree with me. Enter new details to try again.
 								</Typography>
 							))}
 						<div style={styles.options1}>
 							{modelUpdated && (
-								<Typography>Model successfully updated! Enter new details to try again.</Typography>
+								<Typography>
+									Successfully added your information! Enter new details to try again.
+								</Typography>
 							)}
 							{done && <Typography>That's fine! Enter new details to try again.</Typography>}
 						</div>
