@@ -104,6 +104,8 @@ const Adult = ({ classes }) => {
 	const [prediction, setPrediction] = useState(undefined);
 	const [modelUpdated, setModelUpdated] = useState(false);
 	const [done, setDone] = useState(false);
+	const [rules, setRules] = useState([]);
+	const [showAllRules, setShowAllRules] = useState(false);
 
 	useEffect(() => {
 		Axios.all([getFeatures(1590)])
@@ -134,6 +136,8 @@ const Adult = ({ classes }) => {
 		setPrediction(undefined);
 		setUserGuess(undefined);
 		setModelUpdated(false);
+		setRules([]);
+		setShowAllRules(false);
 
 		const sampleFeatures = {};
 
@@ -150,7 +154,10 @@ const Adult = ({ classes }) => {
 			},
 		})
 			.then((res) => {
-				setExplanation(res.data.explanation);
+				const explanation = res.data.explanation;
+				const rules = explanation.split('because')[1].split('and');
+				setExplanation(`${explanation.split('because')[0]} because ${rules[0]}`);
+				setRules(rules);
 				setPrediction(res.data.prediction);
 				setPredicting(false);
 			})
@@ -227,6 +234,8 @@ const Adult = ({ classes }) => {
 		setPrediction(undefined);
 		setUserGuess(undefined);
 
+		setRules([]);
+		setShowAllRules(false);
 		setFeatureValues({ ...featureValues, [f]: v });
 	};
 
@@ -256,9 +265,16 @@ const Adult = ({ classes }) => {
 					</Button>
 				</div>
 				<Typography style={styles.text}>
-					{predicting
-						? 'Explaining sample...'
-						: explanation.replace("'1'", 'spam').replace("'0'", 'not spam')}
+					{predicting ? 'Explaining sample...' : explanation}
+				</Typography>
+				<Typography
+					onClick={() => setShowAllRules(!showAllRules)}
+					style={{ ...styles.text, textDecoration: 'underline', cursor: 'pointer' }}
+				>
+					{rules.length > 2 ? `show ${showAllRules ? 'less' : 'more'} rules` : ''}
+				</Typography>
+				<Typography style={{ ...styles.text, whiteSpace: 'pre-wrap' }}>
+					{showAllRules && rules.join('\n')}
 				</Typography>
 				{explanation !== defaultExplanation && (
 					<div style={styles.options1}>
@@ -284,9 +300,9 @@ const Adult = ({ classes }) => {
 						{userGuess &&
 							(userGuess !== prediction ? (
 								<div style={styles.options1}>
-									<Typography>
-										You seem to disagree with me, would you like me to use this new information in
-										future explanations?
+									<Typography style={styles.text}>
+										You seem to disagree with the model, would you like to use this new information
+										in future explanations?
 									</Typography>
 									<div style={styles.controls}>
 										<Button
@@ -308,13 +324,13 @@ const Adult = ({ classes }) => {
 									</div>
 								</div>
 							) : (
-								<Typography>
-									Great! You seem to agree with me. Enter new details to try again.
+								<Typography style={styles.text}>
+									Great! You seem to agree with the model. Enter new details to try again.
 								</Typography>
 							))}
 						<div style={styles.options1}>
 							{modelUpdated && (
-								<Typography>
+								<Typography style={styles.text}>
 									Successfully added your information! Enter new details to try again.
 								</Typography>
 							)}

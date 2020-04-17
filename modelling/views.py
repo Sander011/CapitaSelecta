@@ -159,7 +159,8 @@ class DatasetViewSet(viewsets.ViewSet):
         X = np.array(pd.Series(json.loads(request.GET['sample']))).reshape(1,-1)
         y = pd.Series(request.GET['prediction'])
         X = model.named_steps['label_encoder'].fit_transform(X)
-        model.named_steps['classifier'].partial_fit(X, y)
+        for _ in range(100):
+            model.named_steps['classifier'].partial_fit(X, y)
         joblib.dump(model, f'{pk}.sav')
         return Response()
 
@@ -216,5 +217,4 @@ class DatasetViewSet(viewsets.ViewSet):
 
         cf, f, cf_rules, f_rules = explain_sample(df, model, X, [i for i, x in enumerate(attribute_names) if x in categorical_names], None)
         print(f'Explanation: {time.time() - model_loading_time}s')
-        print(f)
         return Response({'explanation': cf, 'prediction': prediction[0]})
