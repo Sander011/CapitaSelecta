@@ -217,4 +217,5 @@ class DatasetViewSet(viewsets.ViewSet):
 
         cf, f, cf_rules, f_rules = explain_sample(df, model, X, [i for i, x in enumerate(attribute_names) if x in categorical_names], None)
         print(f'Explanation: {time.time() - model_loading_time}s')
+        print(cf)
         return Response({'explanation': cf, 'prediction': prediction[0]})

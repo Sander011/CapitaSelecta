@@ -99,13 +99,14 @@ const Adult = ({ classes }) => {
 	const [featureValues, setFeatureValues] = useState({});
 	const [error, setError] = useState(undefined);
 	const [predicting, setPredicting] = useState(false);
-	const [explanation, setExplanation] = useState(defaultExplanation);
+	const [explanation, setExplanation] = useState(undefined);
 	const [userGuess, setUserGuess] = useState(undefined);
-	const [prediction, setPrediction] = useState(undefined);
+	const [prediction, setPrediction] = useState(defaultExplanation);
 	const [modelUpdated, setModelUpdated] = useState(false);
 	const [done, setDone] = useState(false);
 	const [rules, setRules] = useState([]);
 	const [showAllRules, setShowAllRules] = useState(false);
+	const [showExplanation, setShowExplanation] = useState(false);
 
 	useEffect(() => {
 		Axios.all([getFeatures(1590)])
@@ -138,6 +139,7 @@ const Adult = ({ classes }) => {
 		setModelUpdated(false);
 		setRules([]);
 		setShowAllRules(false);
+		setShowExplanation(false);
 
 		const sampleFeatures = {};
 
@@ -154,11 +156,16 @@ const Adult = ({ classes }) => {
 			},
 		})
 			.then((res) => {
-				const explanation = res.data.explanation;
+				let explanation = res.data.explanation;
+				explanation = explanation.replace('predicted', 'predicted that this adult has an income');
+				explanation = explanation.replace(/<=/gi, '≤');
+				explanation = explanation.replace(/>=/gi, '≥');
+				explanation = explanation.replace(/\/=/gi, '≠');
+				explanation = explanation.replace(/'/gi, '');
 				const rules = explanation.split('because')[1].split('and');
 				setExplanation(`${explanation.split('because')[0]} because ${rules[0]}`);
 				setRules(rules);
-				setPrediction(res.data.prediction);
+				setPrediction(explanation.split(' instead')[0]);
 				setPredicting(false);
 			})
 			.catch((err) => {
@@ -230,9 +237,10 @@ const Adult = ({ classes }) => {
 
 	const handleChange = (f, v) => {
 		setPredicting(false);
-		setExplanation(defaultExplanation);
-		setPrediction(undefined);
+		setExplanation(undefined);
+		setPrediction(defaultExplanation);
 		setUserGuess(undefined);
+		setShowExplanation(false);
 
 		setRules([]);
 		setShowAllRules(false);
@@ -242,12 +250,16 @@ const Adult = ({ classes }) => {
 	return (
 		<div style={styles.container}>
 			<div style={styles.leftColumn}>
-				{features.map((f) => (
-					<div key={f} style={styles.input}>
-						<Typography style={styles.inputText}>{f}</Typography>
-						{renderValueChangers(f)}
-					</div>
-				))}
+				{features.length > 0 ? (
+					features.map((f) => (
+						<div key={f} style={styles.input}>
+							<Typography style={styles.inputText}>{f}</Typography>
+							{renderValueChangers(f)}
+						</div>
+					))
+				) : (
+					<CircularProgress style={{ margin: 'auto' }} size={40} color={'primary'} />
+				)}
 			</div>
 			<div style={styles.rightColumn}>
 				<div>
@@ -255,38 +267,53 @@ const Adult = ({ classes }) => {
 						onClick={() => predictSample()}
 						className={classes.button}
 						variant="contained"
-						color="secondary"
+						color={prediction !== defaultExplanation ? 'primary' : 'secondary'}
 					>
 						{predicting ? (
 							<CircularProgress size={20} color="white" />
 						) : (
-							<Typography>Explain</Typography>
+							<Typography>Predict</Typography>
 						)}
 					</Button>
 				</div>
 				<Typography style={styles.text}>
-					{predicting ? 'Explaining sample...' : explanation}
+					{predicting ? 'Predicting sample...' : prediction}
 				</Typography>
-				<Typography
-					onClick={() => setShowAllRules(!showAllRules)}
-					style={{ ...styles.text, textDecoration: 'underline', cursor: 'pointer' }}
-				>
-					{rules.length > 2 ? `show ${showAllRules ? 'less' : 'more'} rules` : ''}
-				</Typography>
-				<Typography style={{ ...styles.text, whiteSpace: 'pre-wrap' }}>
-					{showAllRules && rules.join('\n')}
-				</Typography>
-				{explanation !== defaultExplanation && (
+				{prediction && prediction !== defaultExplanation && (
+					<Button
+						className={classes.button}
+						variant="contained"
+						onClick={() => setShowExplanation(true)}
+						color={showExplanation ? 'primary' : ''}
+					>
+						<Typography variant="p">Why {prediction.split('income ')[1]}?</Typography>
+					</Button>
+				)}
+				{showExplanation && (
+					<React.Fragment>
+						<Typography style={styles.text}>{explanation}</Typography>
+						<Typography
+							onClick={() => setShowAllRules(!showAllRules)}
+							style={{ ...styles.text, textDecoration: 'underline', cursor: 'pointer' }}
+						>
+							{rules.length > 1 ? `show ${showAllRules ? 'less' : 'more'} rules` : ''}
+						</Typography>
+						<Typography style={{ ...styles.text, whiteSpace: 'pre-wrap' }}>
+							{showAllRules && rules.slice(1).join('\n')}
+						</Typography>
+					</React.Fragment>
+				)}
+				{showExplanation && (
 					<div style={styles.options1}>
-						<Typography>What did you think this person was?</Typography>
+						<Typography>What did you think the income of this adult was?</Typography>
 						<div style={styles.controls}>
 							<Button
 								className={classes.button}
 								variant="contained"
-								color={userGuess === '<=50K' ? 'primary' : ''}
-								onClick={() => setUserGuess('<=50K')}
+								color={userGuess === '≤50K' ? 'primary' : ''}
+								onClick={() => setUserGuess('≤50K')}
 							>
-								<Typography>{'<=50K'}</Typography>
+								<Typography>{'≤50K'}</Typography>
 							</Button>
 							<Button
 								className={classes.button}
@@ -298,7 +325,7 @@ const Adult = ({ classes }) => {
 							</Button>
 						</div>
 						{userGuess &&
-							(userGuess !== prediction ? (
+							(userGuess !== prediction.split('income ')[1] ? (
 								<div style={styles.options1}>
 									<Typography style={styles.text}>
 										You seem to disagree with the model, would you like to use this new information
@@ -308,7 +335,7 @@ const Adult = ({ classes }) => {
 										<Button
 											className={classes.button}
 											variant="contained"
-											color="secondary"
+											color={modelUpdated ? 'primary' : ''}
 											onClick={() => updateModel()}
 										>
 											<Typography>Yes</Typography>
@@ -316,7 +343,7 @@ const Adult = ({ classes }) => {
 										<Button
 											className={classes.button}
 											variant="contained"
-											color=""
+											color={done ? 'primary' : ''}
 											onClick={() => setDone(true)}
 										>
 											<Typography>No</Typography>
@@ -329,7 +356,7 @@ const Adult = ({ classes }) => {
 								</Typography>
 							))}
 						<div style={styles.options1}>
-							{modelUpdated && (
+							{modelUpdated && userGuess !== prediction.split('income ')[1] && (
 								<Typography style={styles.text}>
 									Successfully added your information! Enter new details to try again.
 								</Typography>
