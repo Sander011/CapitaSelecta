@@ -25,10 +25,6 @@ def fetch_from_openml(dataset_index, columns_to_drop):
     return X, y, train_X, test_X, train_y, test_y, [x for x in categorical_names if x not in columns_to_drop], attribute_names
 
 
-def obtain_data(dataset_index, columns_to_drop=[]):
-    return fetch_from_openml(dataset_index, columns_to_drop)
-
-
 def train_model(classifier, categorical_names, X, train_X, train_y, test_X, test_y):
     model = Pipeline([('label_encoder', ce.CustomLabelEncoder(categorical_names).fit(X)),('classifier', classifier)])
     model.fit(train_X, train_y)

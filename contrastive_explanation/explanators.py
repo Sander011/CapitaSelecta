@@ -431,7 +431,6 @@ class PointExplanator(Explanator):
         if strategy == 'closest':
             return xs_foil[np.argmax(weights[1:]) + 1]
         elif strategy == 'medoid':
-            print(xs_foil)
             return xs_foil[0][0]
         elif strategy == 'random':
             return xs_foil[np.random.randint(xs_foil.shape[0], size=1), :][0]

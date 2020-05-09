@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-import DatasetDetails from './components/DatasetDetails';
+import Axios from 'axios';
 
 import { makeStyles } from '@material-ui/core/styles';
-import { AppBar, Button, Toolbar, Typography } from '@material-ui/core';
-import Spam from './components/Spam';
+import { AppBar, Button, Snackbar, Toolbar, Typography } from '@material-ui/core';
+import Alert from '@material-ui/lab/Alert';
+
 import Adult from './components/Adult';
+import Updater from './components/Updater';
 
 const useStyles = makeStyles((theme) => ({
 	root: {
@@ -20,17 +22,43 @@ const useStyles = makeStyles((theme) => ({
 	title: {
 		flexGrow: 1,
 	},
+	button: {
+		width: '10rem',
+		height: '3rem',
+		padding: '1rem',
+		borderRadius: '1rem',
+		margin: '1rem',
+	},
+	controls: {
+		display: 'flex',
+		flexDirection: 'row',
+		width: '30vw',
+		alignItems: 'center',
+		justifyContent: 'space-evenly',
+	},
 }));
 
 const App = () => {
 	const classes = useStyles();
-	const [datasetId, setDatasetId] = useState(1590);
+	const [error, setError] = useState(undefined);
+	const [samples, setSamples] = useState([]);
+	const [features, setFeatures] = useState([]);
+	const [valuesPerFeature, setValuesPerFeature] = useState({});
+	const [boundsPerFeature, setBoundsPerFeature] = useState({});
 
-	const renderContent = () => {
-		if (datasetId === 44) return <Spam />;
-		if (datasetId === 1590) return <Adult />;
-		return <DatasetDetails datasetId={datasetId} />;
-	};
+	useEffect(() => {
+		Axios.get('/api/datasets/retrieve_adult/')
+			.then((details) => {
+				setFeatures(details.data.features);
+				setValuesPerFeature(details.data.values_per_category);
+				setBoundsPerFeature(details.data.bounds_per_feature);
+			})
+			.catch((_) =>
+				setError(
+					'Something went wrong while fetching the dataset. Please try another dataset or come back later.',
+				),
+			);
+	}, []);
 
 	return (
 		<div className={classes.root}>
@@ -39,21 +67,40 @@ const App = () => {
 					<Typography variant="h6" className={classes.title}>
 						Constrastive explanations
 					</Typography>
-					<Button onClick={() => setDatasetId(1590)} color="inherit">
-						Adult
-					</Button>
-					{/* <Button onClick={() => setDatasetId(31)} color="inherit">
-						Credit-g
-					</Button> */}
-					<Button onClick={() => setDatasetId(44)} color="inherit">
-						Spam
-					</Button>
-					{/* <Button onClick={() => setDatasetId(54)} color="inherit">
-						Vehicle
-					</Button> */}
+					{samples.length > 0 && (
+						<Button onClick={() => setSamples([])} color="inherit">
+							Go back
+						</Button>
+					)}
 				</Toolbar>
 			</AppBar>
-			{renderContent()}
+			{samples.length > 0 ? (
+				<Updater
+					restart={() => setSamples([])}
+					features={features}
+					classes={classes}
+					setError={setError}
+					samples={samples}
+				/>
+			) : (
+				<Adult
+					features={features}
+					valuesPerFeature={valuesPerFeature}
+					boundsPerFeature={boundsPerFeature}
+					classes={classes}
+					setError={setError}
+					setSamples={setSamples}
+				/>
+			)}
+			<Snackbar
+				open={error !== undefined}
+				autoHideDuration={6000}
+				onClose={() => setError(undefined)}
+			>
+				<Alert onClose={() => setError(undefined)} severity="error">
+					{error}
+				</Alert>
+			</Snackbar>
 		</div>
 	);
 };
