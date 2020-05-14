@@ -86,9 +86,16 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/3.0/ref/settings/#databases
 
-DATABASES = {}
-DATABASES['default'] = dj_database_url.config(conn_max_age=600)
-
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',  # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.   
+        'NAME': 'django_db',                      # Or path to database file if using sqlite3.            
+        'USER': 'root',                      # Not used with sqlite3.                                         
+        'PASSWORD': 'root',                  # Not used with sqlite3.                                         
+        'HOST': '',                      # Set to empty string for localhost. Not used with sqlite3.          
+        'PORT': '',                      # Set to empty string for default. Not used with sqlite3.            
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/3.0/ref/settings/#auth-password-validators
@@ -127,8 +134,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/3.0/howto/static-files/
 
 
-django_heroku.settings(locals())
-del DATABASES['default']['OPTIONS']['sslmode']
+# django_heroku.settings(locals())
+# del DATABASES['default']['OPTIONS']['sslmode']
 
 STATIC_URL = '/static/'
 CORS_ORIGIN_WHITELIST = [
