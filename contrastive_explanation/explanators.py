@@ -387,6 +387,7 @@ class TreeExplanator(RuleExplanator):
 
         return self.descriptive_path(foil_path, sample, tree), confidence
 
+    """ New code starts here """
     # Split a dataset based on an attribute and an attribute value
     def test_split(self, index, value, dataset):
         left, right = list(), list()
@@ -650,8 +651,6 @@ class TreeExplanator(RuleExplanator):
         ys = self.get_ys(dataset)
         entr = self.get_entropy(ys)
         left, right = self.test_split(index, value, dataset)
-        #     print(left)
-        #     print(right)
         if not left or not right:
             return 0
         left_ratio = len(left) / len(ys)
@@ -660,10 +659,12 @@ class TreeExplanator(RuleExplanator):
             self.get_ys(right)))
         return IG
 
+    # gets labels if placed at end of samples
     def get_ys(self, dataset):
         y = len(dataset[0]) - 1
         return [x[y] for x in dataset]
 
+    # if all weights are 1, the shortest path is the closest foil leaf method
     def add_weight_1(self, node, total):
         if isinstance(node, dict):
             weight = 1
@@ -671,23 +672,18 @@ class TreeExplanator(RuleExplanator):
             self.add_weight_1(node['left'], total)
             self.add_weight_1(node['right'], total)
 
+    # adds the weight to a given node's edges
     def add_weight(self, node, total):
         if isinstance(node, dict):
             IG = self.get_IG(node['index'], node['value'], node['samples'])
-            #         IG = node['score']
             node['IG'] = IG
-            #         print(IG)
             if IG == 0:
                 weight = np.inf
             else:
                 weight = 1 / ((node['amount'] / total) * node['IG'])
-                #         print(left)
-            #         print(right)
             node['weight'] = weight
             self.add_weight(node['left'], total)
             self.add_weight(node['right'], total)
-
-    #             print(weight)
 
     # Print a decision tree with samples
     def print_weight_tree(self, node, depth=0):
@@ -701,24 +697,27 @@ class TreeExplanator(RuleExplanator):
         else:
             print(depth * '   ', 'label:', node[0], 'amount:', node[1])
 
-    def get_weighted_path(self, sample, node):
-        return self.predict_weighted_path(sample, node, [])
+    # wrapper function for part of the result path to the fact leaf
+    def fact_path(self, sample, node):
+        return self.weighted_path(sample, node, [])
 
-    def predict_weighted_path(self, sample, node, path):
+    # get path to fact with weighted edges
+    def weighted_path(self, sample, node, path):
         if isinstance(node, dict):
             if sample[node['index']] < node['value']:
-                return self.predict_weighted_path(sample, node['left'], path + [
+                return self.weighted_path(sample, node['left'], path + [
                     {'index': node['index'], 'value': node['value'], 'score': node['score'],
                      'weight': node['weight'],
                      'side': 'left'}])
             else:
-                return self.predict_weighted_path(sample, node['right'], path + [
+                return self.weighted_path(sample, node['right'], path + [
                     {'index': node['index'], 'value': node['value'], 'score': node['score'],
                      'weight': node['weight'],
                      'side': 'right'}])
         else:
             return path
 
+    # get total weight to a sample
     def get_path_weight(self, sample, node):
         total = 0
         if isinstance(node, dict):
@@ -729,10 +728,11 @@ class TreeExplanator(RuleExplanator):
             total += node['weight']
         return total
 
-    def compare_paths(self, node, label):
+    # get part of the result path leading to the foil leaf
+    def foil_path(self, node, label):
         if isinstance(node, dict):
-            left_weight, left_path = self.compare_paths(node['left'], label)
-            right_weight, right_path = self.compare_paths(node['right'], label)
+            left_weight, left_path = self.foil_path(node['left'], label)
+            right_weight, right_path = self.foil_path(node['right'], label)
             if left_weight < right_weight:
                 return node['weight'] + left_weight, [
                     {'index': node['index'], 'value': node['value'], 'score': node['score'],
@@ -748,21 +748,20 @@ class TreeExplanator(RuleExplanator):
         else:
             return 0, []
 
-
+    #  combine fact and foil path to calculate the shortest path
     def get_full_path(self, sample, node, label):
-        res_path = []
         if sample[node['index']] < node['value']:
             fact_weight = self.get_path_weight(sample, node)
-            fact_path = self.get_weighted_path(sample, node)[::-1]
-            foil_weight, foil_path = self.compare_paths(node['right'], label)
+            fact_path = self.fact_path(sample, node)[::-1]
+            foil_weight, foil_path = self.foil_path(node['right'], label)
             current_foil_weight = node['weight']
             current_foil_path = [
                 {'index': node['index'], 'value': node['value'], 'score': node['score'], 'weight': node['weight'],
                  'side': 'right'}]
         else:
             fact_weight = self.get_path_weight(sample, node)
-            fact_path = self.get_weighted_path(sample, node)[::-1]
-            foil_weight, foil_path = self.compare_paths(node['left'], label)
+            fact_path = self.fact_path(sample, node)[::-1]
+            foil_weight, foil_path = self.foil_path(node['left'], label)
             current_foil_weight = node['weight']
             current_foil_path = [
                 {'index': node['index'], 'value': node['value'], 'score': node['score'], 'weight': node['weight'],
@@ -771,6 +770,7 @@ class TreeExplanator(RuleExplanator):
         total_path = fact_path + current_foil_path + foil_path
         return total_weight, total_path
 
+    # return resulting foil path and the total weight of the foil path
     def get_foil_path(self, sample, node, label):
         if isinstance(node, dict):
             if sample[node['index']] < node['value']:
@@ -829,6 +829,7 @@ class TreeExplanator(RuleExplanator):
         else:
             return res/len(xs)
 
+    # format rule path for the rest of the code
     def format_rule_path(self, path, sample):
 
         return[(node['index'],
@@ -838,26 +839,23 @@ class TreeExplanator(RuleExplanator):
                 sample[node['index']] > node['value'])
                for node in path]
 
-
+    # wrapper function for putting weights into a tree and getting the foil path
     def get_rule_path(self, dataset, tree, fact_sample, total_samples):
-        # print('going at it')
         self.add_size(tree)
         self.add_samples_to_tree(dataset, tree)
         tree['weight'] = 0
         self.add_weight(tree, total_samples)
         fact_label = self.predict(fact_sample, tree)
-        # print(fact_label)
         path = self.get_foil_path(fact_sample, tree, fact_label)
         return path
 
+    # wrapper function for putting weights into a tree and getting the foil path with closest leaf selection method
     def get_rule_path_1(self, dataset, tree, fact_sample, total_samples):
-        # print('going at it')
         self.add_size(tree)
         self.add_samples_to_tree(dataset, tree)
         tree['weight'] = 1
         self.add_weight_1(tree, total_samples)
         fact_label = self.predict(fact_sample, tree)
-        # print(fact_label)
         path = self.get_foil_path(fact_sample, tree, fact_label)
         return path
 
