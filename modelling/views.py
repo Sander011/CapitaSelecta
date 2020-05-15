@@ -55,9 +55,9 @@ class DatasetViewSet(viewsets.ViewSet):
         df = pd.Series(json.loads(request.GET['sample']))
         prediction = predict_samples(model, np.array(df).reshape(1, -1))
 
-        cf, _, _, _ = explain_sample(df, model, X, [i for i, x in enumerate(attribute_names) if x in categorical_names], None)
+        _, _, _, _, _, cf = explain_sample(df, model, X, [i for i, x in enumerate(attribute_names) if x in categorical_names], None)
 
-        return Response({'explanation': cf, 'prediction': prediction[0]})
+        return Response({'explanation': cf[3], 'prediction': prediction[0]})
 
 
     @action(detail=False)

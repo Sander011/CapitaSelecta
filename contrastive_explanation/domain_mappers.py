@@ -99,6 +99,7 @@ class DomainMapper:
         if scaled_data is None:
             scaled_data = data
         weights = self._weights(scaled_data, distance_metric)
+
         # Predict; distinguish between .predict and .predict_proba
         predict_data2 = np.transpose(predict_data).copy()
         i = 0
@@ -109,9 +110,7 @@ class DomainMapper:
             except:
                 predict_data2[i] = x
             i += 1
-        predict_data2 = np.transpose(predict_data2).astype('O')
-        # preds = predict_fn(predict_data.astype('O'))
-        preds = predict_fn(predict_data2)
+        preds = predict_fn(np.transpose(predict_data2))
         if preds.ndim > 1:
             preds = np.argmax(preds, axis=1)
 
@@ -335,6 +334,7 @@ class DomainMapperTabular(DomainMapper):
             neighor_data_labels (ys around sample, corresponding to xs)
         """
         from lime.lime_tabular import LimeTabularExplainer
+
         categorical_features = None
         if self.categorical_features is not None:
             cfi = itertools.chain.from_iterable
@@ -430,6 +430,7 @@ class DomainMapperTabular(DomainMapper):
                 fact,
                 foil,
                 counterfactuals,
+                facts,
                 factuals,
                 confidence,
                 fidelity,
@@ -453,13 +454,15 @@ class DomainMapperTabular(DomainMapper):
         """
         fact = self.map_contrast_names(fact)
         foil = self.map_contrast_names(foil)
+        e = []
+        for rule in counterfactuals:
+            e.append(f"The model predicted '{fact}' instead of '{foil}' "f"because '{self.rule_to_str(rule)}'")
 
-        cf = f"The model predicted '{fact}' instead of '{foil}' because '{self.rule_to_str(counterfactuals)}'"
-        f = f"The model predicted '{fact}' because '{self.rule_to_str(factuals, remove_last=True)}'"
         if factuals is None:
-            return cf, counterfactuals
+            return ('broken ofzo', counterfactuals, facts, fact, foil, e)
         else:
-            return cf, f, counterfactuals, factuals
+            return (e, counterfactuals, f"The model predicted '{fact}' because "
+                                        f"'{self.rule_to_str(factuals, remove_last=False)}'")
 
 
 class DomainMapperPandas(DomainMapperTabular):
@@ -732,7 +735,9 @@ class DomainMapperImageSegments(DomainMapper):
         fact = self.map_contrast_names(fact)
         foil = self.map_contrast_names(foil)
 
+        print(fact)
         show_image(self.image)
+        print(foil)
         show_image(self.alt_image)
 
         self.map_feature_names(counterfactuals)

@@ -36,6 +36,7 @@ class ContrastiveExplanation:
                  explanator=None,
                  regression=False,
                  verbose=False,
+                 print_tree=False,
                  seed=1):
         """Init.
 
@@ -51,7 +52,7 @@ class ContrastiveExplanation:
         self.seed = check_random_state(seed)
 
         if not explanator:
-            explanator = TreeExplanator(seed=self.seed)
+            explanator = TreeExplanator(seed=self.seed, print_tree=print_tree, feature_names=domain_mapper.features)
 
         if not isinstance(domain_mapper, DomainMapper):
             raise Exception('domain_mapper should be a DomainMapper')
@@ -217,10 +218,15 @@ class ContrastiveExplanation:
                                               ys_foil,
                                               weights,
                                               foil_strategy=foil_strategy)
-        rule, confidence, local_fidelity = exp_return
-
+        rules, facts, confidence, local_fidelity = exp_return
+        # print('rule1', rule1)
+        # print('rule2', rule2)
         # Explain difference between fact and closest decision
-        counterfactual = self.form_explanation(rule)
+        counterfactuals = []
+        for rule in rules:
+            counterfactuals.append(self.form_explanation(rule))
+        # print('counterfactual1', counterfactual1)
+        # print('counterfactual2', counterfactual2)
 
         # Also explain using factual if required
         factual = None
@@ -245,7 +251,7 @@ class ContrastiveExplanation:
                 factual = None
 
         # Warnings
-        if not counterfactual:
+        if not counterfactuals[0]:
             # First, try to overfit more to get explanation
             if (type(self.explanator) is TreeExplanator and
                     self.explanator.generalize < 2):
@@ -265,9 +271,9 @@ class ContrastiveExplanation:
                           f'"{n(fact)}" and foil "{n(foil)}"')
             if self.regression:
                 warnings.warn('Consider increasing epsilon')
-
+        # print(counterfactual)
         return (fact, foil,
-                counterfactual, factual,
+                counterfactuals, facts, factual,
                 confidence, local_fidelity,
                 time.time() - st)
 
@@ -277,5 +283,6 @@ class ContrastiveExplanation:
         """Explain instance and map to domain. For arguments see
         ContrastiveExplanation.explain_instance().
         """
-        return self.domain_mapper.explain(*self.explain_instance(*args,
+        e = self.domain_mapper.explain(*self.explain_instance(*args,
                                                                  **kwargs))
+        return e

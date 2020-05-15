@@ -118,12 +118,10 @@ def rbf(d, sigma=0.1):
 ###############################
 
 
-def print_binary_tree(t, sample, domain_mapper, feature_map=None):
+def print_binary_tree(t, sample):
     """Print a binary tree and sample to a string."""
     fact_leaf = t.apply(sample)[0]
-    feature_names = domain_mapper.features
-    inv_names = domain_mapper.feature_map_inv_verbose
-    categorical_features = domain_mapper.categorical_features
+    print(sample[0])
 
     t_ = t.tree_
     print("def tree():")
@@ -133,28 +131,10 @@ def print_binary_tree(t, sample, domain_mapper, feature_map=None):
         if t_.feature[node] != _tree.TREE_UNDEFINED:
             name = t_.feature[node]
             threshold = t_.threshold[node]
-            if categorical_features is not None:
-                feature_index = inv_names[name]
-                feature = feature_names[feature_index]
-                if feature_index in categorical_features:
-                    print("{}if {} /= {}:".format(indent, feature, domain_mapper.encoders[feature_index].idx2name[
-                        name - feature_map[feature_index][0]]))
-                    recurse(t_.children_left[node], depth + 1)
-                    print("{}else:  # if {} = {}".format(indent, feature,
-                                                         domain_mapper.encoders[feature_index].idx2name[
-                                                             name - feature_map[feature_index][0]]))
-                    recurse(t_.children_right[node], depth + 1)
-                else:
-                    print("{}if {} <= {}:".format(indent, feature, threshold))
-                    recurse(t_.children_left[node], depth + 1)
-                    print("{}else:  # if {} > {}".format(indent, feature, threshold))
-                    recurse(t_.children_right[node], depth + 1)
-            else:
-                feature = feature_names[name]
-                print("{}if {} <= {}:".format(indent, feature, threshold))
-                recurse(t_.children_left[node], depth + 1)
-                print("{}else:  # if {} > {}".format(indent, feature, threshold))
-                recurse(t_.children_right[node], depth + 1)
+            print("{}if {} <= {}:".format(indent, name, threshold))
+            recurse(t_.children_left[node], depth + 1)
+            print("{}else:  # if {} > {}".format(indent, name, threshold))
+            recurse(t_.children_right[node], depth + 1)
         else:
             print("{}return {}{}".format(indent, np.argmax(t_.value[node]),
                                          ' (fact)' if node == fact_leaf else ''))
@@ -284,15 +264,4 @@ class CustomLabelEncoder(LabelEncoder):
                                                      .transform(y_[:, feature])
         return y_
 
-    def inverse_transform(self, y, *args, **kwargs):
-        """Inverse Transform data using CustomLabelEncoder."""
-        y_ = y.copy()
-        if type(y_) is pd.core.frame.DataFrame:
-            for feature in self.to_encode:
-                y_.loc[:, feature] = self.label_encoders[feature] \
-                                         .inverse_transform(y_[feature])
-        else:
-            for i, feature in enumerate(self.encode_indices):
-                y_[:, feature] = self.label_encoders[self.to_encode[i]] \
-                                                     .inverse_transform(y_[:, feature])
-        return y_
+

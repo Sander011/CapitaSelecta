@@ -1,5 +1,8 @@
 """Uses generic tabular data to explain a single instance with
 a contrastive/counterfactual explanation.
+
+Attributes:
+    DEBUG (bool): Debug mode enabled
 """
 
 import numpy as np
@@ -9,18 +12,22 @@ import warnings
 from sklearn import tree, ensemble, metrics
 from sklearn.tree import _tree
 from sklearn.utils import check_random_state
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
 
 from .rules import Operator, Literal
 from .utils import cache, check_stringvar, check_relvar, print_binary_tree
+
+
+DEBUG = False
+
 
 class Explanator:
     """General class for Explanators (method to acquire explanation)."""
 
     def __init__(self,
                  verbose=False,
-                 seed=1,
-                 print_tree=False
-                 ):
+                 seed=1):
         """Init.
 
         Args:
@@ -29,7 +36,6 @@ class Explanator:
         """
         self.verbose = verbose
         self.seed = check_random_state(seed)
-        self.print_tree = print_tree
 
     def get_rule(self,
                  fact_sample,
@@ -88,10 +94,9 @@ class TreeExplanator(RuleExplanator):
     def __init__(self,
                  generalize=2,
                  verbose=False,
-                 seed=1,
                  print_tree=False,
-                 feature_map=None,
-                 domain_mapper=None):
+                 feature_names=[],
+                 seed=1):
         """Init.
 
         Args:
@@ -102,8 +107,7 @@ class TreeExplanator(RuleExplanator):
         self.tree = None
         self.graph = None
         self.print_tree = print_tree
-        self.feature_map = feature_map
-        self.domain_mapper = domain_mapper
+        self.feature_names = feature_names
 
     @cache
     def _foil_tree(self, xs, ys, weights, seed, **dtargs):
@@ -144,6 +148,9 @@ class TreeExplanator(RuleExplanator):
 
         if self.verbose:
             print('[E] Fidelity of tree on neighborhood data =', local_fidelity)
+
+        if DEBUG:
+            print_binary_tree(model, xs[0].reshape(1, -1), self.feature_names)
 
         return model, local_fidelity
 
@@ -357,8 +364,8 @@ class TreeExplanator(RuleExplanator):
         fact_leaf = tree.apply(sample.reshape(1, -1)).item(0)
 
         # TODO: Retrain tree if wrong prediction
-        if np.argmax(tree.tree_.value[fact_leaf]) != 0:
-            warnings.warn('Tree did not predict as fact')
+        # if np.argmax(tree.tree_.value[fact_leaf]) != 0:
+        #     warnings.warn('Tree did not predict as fact')
 
         # Find closest leaf that does not predict output x, based on a strategy
         graph, foil_nodes = self._fact_foil_graph(tree.tree_,
@@ -377,7 +384,406 @@ class TreeExplanator(RuleExplanator):
                                                foil_nodes,
                                                tree.tree_,
                                                strategy)
+
         return self.descriptive_path(foil_path, sample, tree), confidence
+
+    # Split a dataset based on an attribute and an attribute value
+    def test_split(self, index, value, dataset):
+        left, right = list(), list()
+        for row in dataset:
+            if row[index] < value:
+                left.append(row)
+            else:
+                right.append(row)
+        return left, right
+
+    # Calculate the Gini index for a split dataset
+    def gini_index(self, groups, classes):
+        # count all samples at split point
+        n_instances = float(sum([len(group) for group in groups]))
+        # sum weighted Gini index for each group
+        gini = 0.0
+        for group in groups:
+            size = float(len(group))
+            # avoid divide by zero
+            if size == 0:
+                continue
+            score = 0.0
+            # score the group based on the score for each class
+            for class_val in classes:
+                p = [row[-1] for row in group].count(class_val) / size
+                score += p * p
+            # weight the group score by its relative size
+            gini += (1.0 - score) * (size / n_instances)
+        return gini
+
+    # Determine whether all labels in dataset have same label
+    def pure_node(self, dataset):
+        class_values = list(set(row[-1] for row in dataset))
+        return class_values[1:] == class_values[:-1]
+
+    # Select the best split point for a dataset
+    def get_split(self, dataset):
+        class_values = list(set(row[-1] for row in dataset))
+        b_index, b_value, b_score, b_groups = 999, 999, 999, None
+        for index in range(len(dataset[0]) - 1):
+            for row in dataset:
+                groups = self.test_split(index, row[index], dataset)
+                gini = self.gini_index(groups, class_values)
+                if gini < b_score:
+                    b_index, b_value, b_score, b_groups = index, row[index], gini, groups
+        # check for a no split
+        left, right = b_groups
+        if not left or not right:
+            return self.to_terminal(left + right)
+        return {'index': b_index, 'value': b_value, 'groups': b_groups, 'score': b_score}
+
+    # create split point for a dataset based on predefined split
+    def get_path_split(self, dataset, path):
+        if len(path) == 0:
+            return self.to_terminal(dataset), []
+        while len(path) > 0:
+            node = path[0]
+            b_index = node['index']
+            b_value = node['value']
+            b_groups = self.test_split(b_index, b_value, dataset)
+            class_values = list(set(row[-1] for row in dataset))
+            b_score = self.gini_index(b_groups, class_values)
+            left, right = b_groups
+            if not left or not right:
+                if len(path) > 0:
+                    # print('skipping obsolete decision')
+                    path = path[1:]
+                else:
+                    return self.to_terminal(left + right)
+            else:
+                return {'index': b_index, 'value': b_value, 'groups': b_groups, 'score': b_score}, path
+        return {'index': b_index, 'value': b_value, 'groups': b_groups, 'score': b_score}, path
+
+    # Create child splits for a node or make terminal
+    def path_split(self, node, max_depth, min_size, depth, path):
+        if isinstance(node, dict):
+            left, right = node['groups']
+            del (node['groups'])
+            # check for a no split
+            # check for max depth
+            if depth >= max_depth:
+                node['left'], node['right'] = self.to_terminal(left), self.to_terminal(right)
+                return
+            # check path
+            if len(path) > 0:
+                if path[0]['side'] == 'left':
+                    path = path[1:]
+                    # pathsplit left
+                    # print('going left')
+                    if self.pure_node(left):
+                        # print('pure node found')
+                        node['left'] = self.to_terminal(left)
+                    else:
+                        node['left'], path = self.get_path_split(left, path)
+                        if isinstance(node['left'], dict):
+                            # print('node is dict')
+                            self.path_split(node['left'], max_depth, min_size, depth + 1, path)
+                    # process right child
+                    if len(right) <= min_size or self.pure_node(right):
+                        node['right'] = self.to_terminal(right)
+                    else:
+                        node['right'] = self.get_split(right)
+                        if isinstance(node['right'], dict):
+                            # print('node is dict')
+                            self.split(node['right'], max_depth, min_size, depth + 1)
+                elif path[0]['side'] == 'right':
+                    path = path[1:]
+                    # pathsplit right
+                    # print('going right')
+                    if self.pure_node(right):
+                        # print('pure node found')
+                        node['right'] = self.to_terminal(right)
+                    else:
+                        node['right'], path = self.get_path_split(right, path)
+                        if isinstance(node['right'], dict):
+                            self.path_split(node['right'], max_depth, min_size, depth + 1, path)
+                    # process left child
+                    if len(left) <= min_size or self.pure_node(left):
+                        node['left'] = self.to_terminal(left)
+                    else:
+                        node['left'] = self.get_split(left)
+                        if isinstance(node['left'], dict):
+                            self.split(node['left'], max_depth, min_size, depth + 1)
+                else:
+                    print('unknown side in path')
+
+
+    # Create a terminal node value
+    def to_terminal(self, group):
+        outcomes = [row[-1] for row in group]
+        return max(set(outcomes), key=outcomes.count)
+
+    # Create child splits for a node or make terminal
+    def split(self, node, max_depth, min_size, depth):
+        left, right = node['groups']
+        del (node['groups'])
+        # check for max depth
+        if depth >= max_depth:
+            node['left'], node['right'] = self.to_terminal(left), self.to_terminal(right)
+            return
+        # process left child
+        if len(left) <= min_size or self.pure_node(left):
+            node['left'] = self.to_terminal(left)
+        else:
+            node['left'] = self.get_split(left)
+            if isinstance(node['left'], dict):
+                self.split(node['left'], max_depth, min_size, depth + 1)
+        # process right child
+        if len(right) <= min_size or self.pure_node(right):
+            node['right'] = self.to_terminal(right)
+        else:
+            node['right'] = self.get_split(right)
+            if isinstance(node['right'], dict):
+                self.split(node['right'], max_depth, min_size, depth + 1)
+
+    # Build a decision tree
+    def build_tree(self, train, max_depth, min_size):
+        root = self.get_split(train)
+        self.split(root, max_depth, min_size, 1)
+        return root
+
+    # Build a decision tree with a specified path
+    def build_path_tree(self, train, max_depth, min_size, path):
+        root, path = self.get_path_split(train, path)
+        self.path_split(root, max_depth, min_size, 1, path)
+        return root
+
+    # Print a decision tree
+    def print_tree_func(self, node, depth=0):
+        if isinstance(node, dict):
+            print('%s[X%d < %.3f]' % ((depth * '   ', (node['index']), node['value'])))
+            print(depth * '   ', 'gini index:', node['score'])
+            self.print_tree_func(node['left'], depth + 1)
+            self.print_tree_func(node['right'], depth + 1)
+        else:
+            print('%s[%s]' % ((depth * '   ', node)))
+
+    def predict(self, sample, node):
+        if isinstance(node, dict):
+            if sample[node['index']] < node['value']:
+                return self.predict(sample, node['left'])
+            else:
+                return self.predict(sample, node['right'])
+        else:
+            return node
+
+    def get_path(self, sample, node):
+        return self.predict_path(sample, node, [])
+
+    def predict_path(self, sample, node, path):
+        if isinstance(node, dict):
+            if sample[node['index']] < node['value']:
+                return self.predict_path(sample, node['left'], path + [
+                    {'index': node['index'], 'value': node['value'], 'score': node['score'], 'side': 'left'}])
+            else:
+                return self.predict_path(sample, node['right'], path + [
+                    {'index': node['index'], 'value': node['value'], 'score': node['score'], 'side': 'right'}])
+        else:
+            return path
+
+    def get_train(self, xs, ys):
+        train = []
+        xslist = xs.tolist()
+        yslist = ys.tolist()
+        for i in range(len(xslist)):
+            train.append(xslist[i] + [yslist[i]])
+        return train
+
+    def get_tree(self, xs, ys):
+        train = self.get_train(xs, ys)
+        return self.build_tree(train, 100, 1)
+
+    def add_samples_to_tree(self, samples, node):
+        for sample in samples:
+            self.add_to_tree(sample, node)
+        return node
+
+    def add_size(self, node):
+        node['amount'] = 0
+        node['samples'] = []
+        if isinstance(node['left'], dict):
+            self.add_size(node['left'])
+        else:
+            node['left'] = [node['left'], 0, [], 0]
+        if isinstance(node['right'], dict):
+            self.add_size(node['right'])
+        else:
+            node['right'] = [node['right'], 0, [], 0]
+
+    def add_to_tree(self, sample, node):
+        if isinstance(node, dict):
+            node['amount'] += 1
+            node['samples'].append(sample)
+            if sample[node['index']] < node['value']:
+                self.add_to_tree(sample, node['left'])
+            else:
+                self.add_to_tree(sample, node['right'])
+        else:
+            node[1] += 1
+            node[2].append(sample)
+
+    # Print a decision tree with samples
+    def print_sample_tree(self, node, depth=0):
+        if isinstance(node, dict):
+            print('%s[X%d < %.3f]' % ((depth * '   ', (node['index']), node['value'])))
+            print(depth * '   ', 'gini index:', node['score'])
+            print(depth * '   ', 'amount:', node['amount'])
+            self.print_sample_tree(node['left'], depth + 1)
+            self.print_sample_tree(node['right'], depth + 1)
+        else:
+            print(depth * '   ', 'label:', node[0], 'amount:', node[1])
+
+    def get_entropy(self, ys):
+        ratio = sum(ys) / len(ys)
+        if ratio == 1 or ratio == 0:
+            return 0
+        else:
+            return -(ratio * np.log2(ratio) + (1 - ratio) * np.log2(1 - ratio))
+
+    def get_IG(self, index, value, dataset):
+        ys = self.get_ys(dataset)
+        entr = self.get_entropy(ys)
+        left, right = self.test_split(index, value, dataset)
+        #     print(left)
+        #     print(right)
+        if not left or not right:
+            return 0
+        left_ratio = len(left) / len(ys)
+        right_ratio = 1 - left_ratio
+        IG = entr - (left_ratio * self.get_entropy(self.get_ys(left)) + right_ratio * self.get_entropy(
+            self.get_ys(right)))
+        return IG
+
+    def get_ys(self, dataset):
+        y = len(dataset[0]) - 1
+        return [x[y] for x in dataset]
+
+    def add_weight_1(self, node, total):
+        if isinstance(node, dict):
+            weight = 1
+            node['weight'] = weight
+            self.add_weight_1(node['left'], total)
+            self.add_weight_1(node['right'], total)
+
+    def add_weight(self, node, total):
+        if isinstance(node, dict):
+            IG = self.get_IG(node['index'], node['value'], node['samples'])
+            #         IG = node['score']
+            node['IG'] = IG
+            #         print(IG)
+            if IG == 0:
+                weight = np.inf
+            else:
+                weight = 1 / ((node['amount'] / total) * node['IG'])
+                #         print(left)
+            #         print(right)
+            node['weight'] = weight
+            self.add_weight(node['left'], total)
+            self.add_weight(node['right'], total)
+
+    #             print(weight)
+
+    # Print a decision tree with samples
+    def print_weight_tree(self, node, depth=0):
+        if isinstance(node, dict):
+            print('%s[X%d < %.3f]' % ((depth * '   ', (node['index']), node['value'])))
+            print(depth * '   ', 'gini index:', node['score'])
+            print(depth * '   ', 'amount:', node['amount'])
+            print(depth * '   ', 'weight:', node['weight'])
+            self.print_weight_tree(node['left'], depth + 1)
+            self.print_weight_tree(node['right'], depth + 1)
+        else:
+            print(depth * '   ', 'label:', node[0], 'amount:', node[1])
+
+    def get_weighted_path(self, sample, node):
+        return self.predict_weighted_path(sample, node, [])
+
+    def predict_weighted_path(self, sample, node, path):
+        if isinstance(node, dict):
+            if sample[node['index']] < node['value']:
+                return self.predict_weighted_path(sample, node['left'], path + [
+                    {'index': node['index'], 'value': node['value'], 'score': node['score'],
+                     'weight': node['weight'],
+                     'side': 'left'}])
+            else:
+                return self.predict_weighted_path(sample, node['right'], path + [
+                    {'index': node['index'], 'value': node['value'], 'score': node['score'],
+                     'weight': node['weight'],
+                     'side': 'right'}])
+        else:
+            return path
+
+    def get_path_weight(self, sample, node):
+        total = 0
+        if isinstance(node, dict):
+            if sample[node['index']] < node['value']:
+                total += self.get_path_weight(sample, node['left'])
+            else:
+                total += self.get_path_weight(sample, node['right'])
+            total += node['weight']
+        return total
+
+    def compare_paths(self, node, label):
+        if isinstance(node, dict):
+            left_weight, left_path = self.compare_paths(node['left'], label)
+            right_weight, right_path = self.compare_paths(node['right'], label)
+            if left_weight < right_weight:
+                return node['weight'] + left_weight, [
+                    {'index': node['index'], 'value': node['value'], 'score': node['score'],
+                     'weight': node['weight'],
+                     'side': 'left'}] + left_path
+            else:
+                return node['weight'] + right_weight, [
+                    {'index': node['index'], 'value': node['value'], 'score': node['score'],
+                     'weight': node['weight'],
+                     'side': 'right'}] + right_path
+        elif node[0] == label:
+            return np.inf, []
+        else:
+            return 0, []
+
+
+    def get_full_path(self, sample, node, label):
+        res_path = []
+        if sample[node['index']] < node['value']:
+            fact_weight = self.get_path_weight(sample, node)
+            fact_path = self.get_weighted_path(sample, node)[::-1]
+            foil_weight, foil_path = self.compare_paths(node['right'], label)
+            current_foil_weight = node['weight']
+            current_foil_path = [
+                {'index': node['index'], 'value': node['value'], 'score': node['score'], 'weight': node['weight'],
+                 'side': 'right'}]
+        else:
+            fact_weight = self.get_path_weight(sample, node)
+            fact_path = self.get_weighted_path(sample, node)[::-1]
+            foil_weight, foil_path = self.compare_paths(node['left'], label)
+            current_foil_weight = node['weight']
+            current_foil_path = [
+                {'index': node['index'], 'value': node['value'], 'score': node['score'], 'weight': node['weight'],
+                 'side': 'left'}]
+        total_weight = fact_weight + current_foil_weight + foil_weight
+        total_path = fact_path + current_foil_path + foil_path
+        return total_weight, total_path
+
+    def get_foil_path(self, sample, node, label):
+        if isinstance(node, dict):
+            if sample[node['index']] < node['value']:
+                weight, path = self.get_foil_path(sample, node['left'], label)
+            else:
+                weight, path = self.get_foil_path(sample, node['right'], label)
+            current_weight, current_path = self.get_full_path(sample, node, label)
+        else:
+            return np.inf, []
+        if weight < current_weight:
+            return weight, path
+        else:
+            return current_weight, current_path
 
     def get_rule(self,
                  fact_sample,
@@ -391,25 +797,69 @@ class TreeExplanator(RuleExplanator):
         decision tree explanator. For arguments see
         Explanator.get_rule().
         """
-        if self.verbose:
-            print("[E] Explaining with a decision tree...")
 
-        # Train a one-vs-rest tree on the foil data
-        self.tree, fidelity = self._foil_tree(xs, ys, weights,
-                                              self.seed,
-                                              min_samples_split=self.generalize)
+        normal_tree = self.get_tree(xs, ys)
+        train = self.get_train(xs, ys)
+        p = self.get_path(fact_sample, normal_tree)
+        p = p[::-1]
+        fact_normal = self.predict(fact_sample, normal_tree)
+        reverse_tree = self.build_path_tree(train, 100, 1, p)
+        normal_weighted_path = self.get_rule_path(train, normal_tree, fact_sample, len(ys))[1]
+        normal_weighted_path = self.format_rule_path(normal_weighted_path, fact_sample)
+        normal_shortest_path = self.get_rule_path_1(train, normal_tree, fact_sample, len(ys))[1]
+        normal_shortest_path = self.format_rule_path(normal_shortest_path, fact_sample)
+        fact_reverse = self.predict(fact_sample, reverse_tree)
+        reverse_weighted_path = self.get_rule_path(train, reverse_tree, fact_sample, len(ys))[1]
+        reverse_weighted_path = self.format_rule_path(reverse_weighted_path, fact_sample)
+        reverse_shortest_path = self.get_rule_path_1(train, reverse_tree, fact_sample, len(ys))[1]
+        reverse_shortest_path = self.format_rule_path(reverse_shortest_path, fact_sample)
+        fidelity = self.get_fidelity(reverse_tree, train, normal_tree)
 
-        # Get decision path
-        path, confidence = self.closest_decision(self.tree,
-                                                 fact_sample,
-                                                 strategy=foil_strategy)
+        r = [normal_shortest_path, normal_weighted_path, reverse_shortest_path, reverse_weighted_path]
+        facts = [fact_normal, fact_normal, fact_reverse, fact_reverse]
+        return r, facts, 1, fidelity
+
+    def get_fidelity(self, tree1, xs, tree2):
+        res = 0
+        for x in xs:
+            if self.predict(x, tree1)[0] == self.predict(x, tree2)[0]:
+                res += 1
+        if res == 0:
+            return 0
+        else:
+            return res/len(xs)
+
+    def format_rule_path(self, path, sample):
+
+        return[(node['index'],
+                node['value'],
+                0,
+                node['side'] == 'right',
+                sample[node['index']] > node['value'])
+               for node in path]
 
 
-        if self.print_tree:
-            print_binary_tree(self.tree, fact_sample.reshape(1, -1), self.domain_mapper, self.feature_map)
+    def get_rule_path(self, dataset, tree, fact_sample, total_samples):
+        # print('going at it')
+        self.add_size(tree)
+        self.add_samples_to_tree(dataset, tree)
+        tree['weight'] = 0
+        self.add_weight(tree, total_samples)
+        fact_label = self.predict(fact_sample, tree)
+        # print(fact_label)
+        path = self.get_foil_path(fact_sample, tree, fact_label)
+        return path
 
-        return path, confidence, fidelity
-
+    def get_rule_path_1(self, dataset, tree, fact_sample, total_samples):
+        # print('going at it')
+        self.add_size(tree)
+        self.add_samples_to_tree(dataset, tree)
+        tree['weight'] = 1
+        self.add_weight_1(tree, total_samples)
+        fact_label = self.predict(fact_sample, tree)
+        # print(fact_label)
+        path = self.get_foil_path(fact_sample, tree, fact_label)
+        return path
 
 class PointExplanator(Explanator):
     """Explain by selecting and comparing to a prototype point."""
@@ -431,6 +881,7 @@ class PointExplanator(Explanator):
         if strategy == 'closest':
             return xs_foil[np.argmax(weights[1:]) + 1]
         elif strategy == 'medoid':
+            print(xs_foil)
             return xs_foil[0][0]
         elif strategy == 'random':
             return xs_foil[np.random.randint(xs_foil.shape[0], size=1), :][0]

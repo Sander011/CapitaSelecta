@@ -120,7 +120,7 @@ const Adult = ({ classes, features, valuesPerFeature, boundsPerFeature, setError
 				explanation = explanation.replace(/>=/gi, '≥');
 				explanation = explanation.replace(/\/=/gi, '≠');
 				explanation = explanation.replace(/'/gi, '');
-				const rules = explanation.split('because')[1].split('and');
+				const rules = explanation.split('because')[1].split(' and');
 				setExplanation(`${explanation.split('because')[0]} because ${rules[0]}`);
 				setRules(rules);
 				setPrediction(explanation.split(' instead')[0]);
